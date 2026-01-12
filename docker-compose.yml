@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: drill-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: demo
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo123
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    container_name: drill-redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+
+  api:
+    build: ./api
+    container_name: drill-api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://demo:demo123@postgres:5432/demo
+      REDIS_URL: redis://redis:6379/0
+      CACHE_TTL_SECONDS: "30"
+      CORS_ORIGINS: "http://localhost:8080"
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "127.0.0.1:8000:8000"
+
+  web:
+    build: ./web
+    container_name: drill-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "8080:80"
+
+volumes:
+  pgdata:
