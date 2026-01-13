@@ -34,3 +34,25 @@ async def api_scene_data(req: SceneDataRequest):
         request_data=req.model_dump()
     )
     return payload
+
+
+@router.post("/multi_version_scene_data")
+async def api_multi_version_scene_data(req: MultiVersionSceneDataRequest):
+    """获取多版本场景数据"""
+    if not req.od_versions:
+        raise HTTPException(status_code=400, detail="od_versions不能为空")
+
+    # 构建版本占位符
+    version_placeholders = ", ".join(
+        [f"'{version}'" for version in req.od_versions])
+
+    payload = await execute_cached_query(
+        router=router,
+        sql=MULTI_VERSION_QUERY.format(
+            arch=req.baseinfo.platform,
+            version_placeholders=version_placeholders
+        ),
+        cache_prefix="scene:multi_version",
+        request_data=req.model_dump()
+    )
+    return payload

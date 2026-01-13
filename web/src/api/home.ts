@@ -52,6 +52,15 @@ export interface SceneDataResponse {
   rows: Record<string, any>[];
 }
 
+export interface MultiVersionSceneDataRequest {
+  od_versions: string[];
+  baseinfo: BaseInfo;
+}
+
+export interface MultiVersionSceneDataResponse {
+  rows: Record<string, any>[];
+}
+
 /**
  * 获取OD版本列表
  */
@@ -94,4 +103,11 @@ export function getAllScenes(req: AllScenesRequest): Promise<AllScenesResponse> 
  */
 export function getSceneData(req: SceneDataRequest): Promise<SceneDataResponse> {
   return postJSON<SceneDataResponse>("/api/scene/scene_data", req);
+}
+
+/**
+ * 获取多版本场景数据
+ */
+export function getMultiVersionSceneData(req: MultiVersionSceneDataRequest): Promise<MultiVersionSceneDataResponse> {
+  return postJSON<MultiVersionSceneDataResponse>("/api/scene/multi_version_scene_data", req);
 }
