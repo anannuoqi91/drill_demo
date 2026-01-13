@@ -35,6 +35,23 @@ export interface ODVersionsResponse {
   rows: ODVersionItem[];
 }
 
+export interface AllScenesRequest {
+  platform: string;
+}
+
+export interface AllScenesResponse {
+  rows: { scene_name: string }[];
+}
+
+export interface SceneDataRequest {
+  od_version: string;
+  baseinfo: BaseInfo;
+}
+
+export interface SceneDataResponse {
+  rows: Record<string, any>[];
+}
+
 /**
  * 获取OD版本列表
  */
@@ -61,4 +78,20 @@ export function querySceneDirectionsPR(req: SceneDirectionPRRequest): Promise<Ho
  */
 export function queryDirectionLanesPR(req: DirectionLanesPRRequest): Promise<HomeAPIResponse> {
   return postJSON<HomeAPIResponse>("/api/home/scene/direction/lanes_pr", req);
+}
+
+/**
+ * 获取所有场景列表
+ */
+export function getAllScenes(req: AllScenesRequest): Promise<AllScenesResponse> {
+  // 后端接口是GET方法，需要将参数作为查询参数传递
+  return getJSON<AllScenesResponse>(`/api/scene/all_scenes?platform=${req.platform}`);
+}
+
+
+/**
+ * 获取所有场景的数据
+ */
+export function getSceneData(req: SceneDataRequest): Promise<SceneDataResponse> {
+  return postJSON<SceneDataResponse>("/api/scene/scene_data", req);
 }

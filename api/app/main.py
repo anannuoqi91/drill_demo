@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from redis.asyncio import Redis
 
-from .routers import home
+from .routers import home, scene
 from .cache import cache_get, cache_set, stable_dumps
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
@@ -31,6 +31,7 @@ app.add_middleware(
 
 # 注册路由
 app.include_router(home.router)
+app.include_router(scene.router)
 
 
 @app.on_event("startup")
@@ -43,6 +44,7 @@ async def on_startup():
 
     # 将app实例传递给路由
     home.router.app = app
+    scene.router.app = app
 
 
 @app.on_event("shutdown")
