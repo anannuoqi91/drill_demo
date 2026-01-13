@@ -1,6 +1,6 @@
 import React from "react";
 
-export type NavKey = "home" | "x86" | "arm" | "scene";
+export type NavKey = "home" | "x86" | "arm" | "selftest" | "scene";
 
 export default function Sidebar(props: {
     active: NavKey;
@@ -10,8 +10,9 @@ export default function Sidebar(props: {
 
     const items: { key: NavKey; label: string }[] = [
         { key: "home", label: "首页" },
-        { key: "x86", label: "x86" },
-        { key: "arm", label: "arm" },
+        { key: "arm", label: "arm评测" },
+        { key: "x86", label: "x86评测" },
+        { key: "selftest", label: "自测" },
     ];
 
     return (

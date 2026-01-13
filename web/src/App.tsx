@@ -69,7 +69,7 @@ export default function App() {
                 }}>
                     <div>
                         <div style={{ fontSize: 18, fontWeight: 700 }}>
-                            {page === "home" ? "首页" : page === "x86" ? "x86" : page === "arm" ? "arm" : ""}
+                            {page === "home" ? "首页" : page === "arm" ? "arm评测" : page === "x86" ? "x86评测" : page === "selftest" ? "自测" : ""}
                         </div>
                         <div style={{ color: "#666", marginTop: 4, fontSize: 12 }}>
                             默认显示OD最近版本的评测结果
