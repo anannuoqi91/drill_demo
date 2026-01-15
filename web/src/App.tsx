@@ -38,6 +38,17 @@ export default function App() {
     // 新增状态：下拉框是否展开
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
+    // 新增状态：自测页面专用
+    const [triggerLink, setTriggerLink] = useState(""); // trigger link输入
+    const [showTriggerLinkModal, setShowTriggerLinkModal] = useState(false); // 显示trigger link模态框
+    const [testVersion, setTestVersion] = useState(""); // test版本
+    const [baselineVersion, setBaselineVersion] = useState(""); // baseline版本
+    const [selectedScenes, setSelectedScenes] = useState<string[]>([]); // 选中的场景
+    const [isSceneDropdownOpen, setIsSceneDropdownOpen] = useState(false); // 场景下拉框是否展开
+    // 新增状态：数据导入模态框下拉框
+    const [testPlatform, setTestPlatform] = useState(""); // 测试平台：arm、x86
+    const [appData, setAppData] = useState(""); // 应用数据：stop_bar_statistic_with_time、stop_bar_statistic_without_time
+
     // 处理多选OD版本确定按钮点击
     const handleMultiVersionConfirm = () => {
         if (selectedOdVersions.length > 0) {
@@ -93,6 +104,51 @@ export default function App() {
         } else {
             setSelectedOdVersions(odVersions.map(item => item.od_version_minute));
         }
+    };
+
+    // 自测页面：切换场景选择
+    const toggleSceneSelection = (scene: string) => {
+        setSelectedScenes(prev => {
+            if (prev.includes(scene)) {
+                return prev.filter(s => s !== scene);
+            } else {
+                return [...prev, scene];
+            }
+        });
+    };
+
+    // 自测页面：全选/取消全选场景
+    const toggleSelectAllScenes = () => {
+        if (selectedScenes.length === platformScenes.length) {
+            setSelectedScenes([]);
+        } else {
+            setSelectedScenes([...platformScenes]);
+        }
+    };
+
+    // 自测页面：处理trigger link确认
+    const handleTriggerLinkConfirm = () => {
+        // 这里可以添加处理trigger link的逻辑
+        console.log("Trigger Link:", triggerLink);
+        console.log("测试平台:", testPlatform);
+        console.log("应用数据:", appData);
+        setShowTriggerLinkModal(false);
+        setTriggerLink(""); // 清空输入框
+        setTestPlatform(""); // 重置测试平台
+        setAppData(""); // 重置应用数据
+    };
+
+    // 自测页面：重置功能
+    const handleSelfTestReset = () => {
+        setTriggerLink("");
+        setTestVersion("");
+        setBaselineVersion("");
+        setSelectedScenes([]);
+        setTestPlatform(""); // 重置测试平台
+        setAppData(""); // 重置应用数据
+        // 重置数据状态
+        setScenesData([]);
+        setAllSceneData([]);
     };
 
     useEffect(() => {
@@ -232,6 +288,9 @@ export default function App() {
 
             // 触发重新加载数据
             setRefreshTrigger(prev => prev + 1);
+        } else if (page === "selftest") {
+            // 自测页面刷新：重置所有状态
+            handleSelfTestReset();
         } else {
             // 对于其他页面，保持原来的刷新行为
             window.location.reload();
@@ -319,7 +378,9 @@ export default function App() {
                                     ? `，显示版本: ${selectedOdVersions.join(", ")}`
                                     : "，默认显示最新版本"
                                 }`
-                                : "默认显示OD最近版本的评测结果"}
+                                : page === "selftest"
+                                    ? "自测数据对比分析"
+                                    : "默认显示OD最近版本的评测结果"}
                         </div>
                     </div>
 
@@ -514,8 +575,333 @@ export default function App() {
                     </div>
                 </div>
 
+                {/* 自测页面容器A */}
+                {page === "selftest" && (
+                    <div style={{
+                        padding: "16px",
+                        background: "white",
+                        borderBottom: "1px solid #eee",
+                        marginBottom: "16px"
+                    }}>
+                        <div style={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+                            gap: "16px",
+                            alignItems: "end"
+                        }}>
+                            {/* 数据导入按钮 */}
+                            <div>
+                                <button
+                                    onClick={() => setShowTriggerLinkModal(true)}
+                                    style={{
+                                        padding: "8px 16px",
+                                        background: "#28a745",
+                                        color: "white",
+                                        border: "none",
+                                        borderRadius: "4px",
+                                        cursor: "pointer",
+                                        fontSize: "14px",
+                                        fontWeight: "500",
+                                        width: "100%"
+                                    }}
+                                >
+                                    数据导入
+                                </button>
+                            </div>
+
+                            {/* test版本下拉框 */}
+                            <div>
+                                <label style={{ fontSize: 14, fontWeight: 500, display: "block", marginBottom: "4px" }}>
+                                    test版本:
+                                </label>
+                                <select
+                                    value={testVersion}
+                                    onChange={(e) => setTestVersion(e.target.value)}
+                                    style={{
+                                        padding: "6px 12px",
+                                        border: "1px solid #ddd",
+                                        borderRadius: "4px",
+                                        fontSize: "14px",
+                                        width: "100%"
+                                    }}
+                                >
+                                    <option value="">请选择版本</option>
+                                    {odVersions.map((item) => (
+                                        <option key={item.od_version_minute} value={item.od_version_minute}>
+                                            {item.od_version_minute}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* baseline版本下拉框 */}
+                            <div>
+                                <label style={{ fontSize: 14, fontWeight: 500, display: "block", marginBottom: "4px" }}>
+                                    baseline版本:
+                                </label>
+                                <select
+                                    value={baselineVersion}
+                                    onChange={(e) => setBaselineVersion(e.target.value)}
+                                    style={{
+                                        padding: "6px 12px",
+                                        border: "1px solid #ddd",
+                                        borderRadius: "4px",
+                                        fontSize: "14px",
+                                        width: "100%"
+                                    }}
+                                >
+                                    <option value="">请选择版本</option>
+                                    {odVersions.map((item) => (
+                                        <option key={item.od_version_minute} value={item.od_version_minute}>
+                                            {item.od_version_minute}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* scene多选下拉框 */}
+                            <div style={{ position: "relative" }}>
+                                <label style={{ fontSize: 14, fontWeight: 500, display: "block", marginBottom: "4px" }}>
+                                    scene选择:
+                                </label>
+
+                                {/* 下拉框触发按钮 */}
+                                <button
+                                    onClick={() => setIsSceneDropdownOpen(!isSceneDropdownOpen)}
+                                    style={{
+                                        padding: "6px 12px",
+                                        border: "1px solid #ddd",
+                                        borderRadius: "4px",
+                                        fontSize: "12px",
+                                        width: "100%",
+                                        background: "white",
+                                        cursor: "pointer",
+                                        textAlign: "left",
+                                        display: "flex",
+                                        justifyContent: "space-between",
+                                        alignItems: "center"
+                                    }}
+                                >
+                                    <span>
+                                        {selectedScenes.length === 0
+                                            ? "选择场景"
+                                            : selectedScenes.length === 1
+                                                ? selectedScenes[0]
+                                                : `已选 ${selectedScenes.length} 个场景`
+                                        }
+                                    </span>
+                                    <span style={{ transform: isSceneDropdownOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>
+                                        ▼
+                                    </span>
+                                </button>
+
+                                {/* 下拉菜单 */}
+                                {isSceneDropdownOpen && (
+                                    <div style={{
+                                        position: "absolute",
+                                        top: "100%",
+                                        left: 0,
+                                        right: 0,
+                                        background: "white",
+                                        border: "1px solid #ddd",
+                                        borderRadius: "4px",
+                                        boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+                                        zIndex: 1000,
+                                        maxHeight: "200px",
+                                        overflowY: "auto",
+                                        marginTop: "2px"
+                                    }}>
+                                        {/* 全选选项 */}
+                                        <div
+                                            style={{
+                                                padding: "6px 12px",
+                                                borderBottom: "1px solid #eee",
+                                                cursor: "pointer",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: "8px",
+                                                background: selectedScenes.length === platformScenes.length ? "#f0f8ff" : "white"
+                                            }}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                toggleSelectAllScenes();
+                                            }}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedScenes.length === platformScenes.length}
+                                                readOnly
+                                                style={{ margin: 0, pointerEvents: "none" }}
+                                            />
+                                            <span style={{ fontSize: "12px", fontWeight: "500" }}>
+                                                全选 ({platformScenes.length})
+                                            </span>
+                                        </div>
+
+                                        {/* 场景列表 */}
+                                        {platformScenes.map((scene) => (
+                                            <div
+                                                key={scene}
+                                                style={{
+                                                    padding: "6px 12px",
+                                                    cursor: "pointer",
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    gap: "8px",
+                                                    background: selectedScenes.includes(scene) ? "#f0f8ff" : "white"
+                                                }}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    toggleSceneSelection(scene);
+                                                }}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedScenes.includes(scene)}
+                                                    readOnly
+                                                    style={{ margin: 0, pointerEvents: "none" }}
+                                                />
+                                                <span style={{ fontSize: "12px" }}>
+                                                    {scene}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* trigger link模态框 */}
+                {showTriggerLinkModal && (
+                    <div style={{
+                        position: "fixed",
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        background: "rgba(0,0,0,0.5)",
+                        display: "flex",
+                        justifyContent: "center",
+                        alignItems: "center",
+                        zIndex: 3000
+                    }}>
+                        <div style={{
+                            background: "white",
+                            padding: "24px",
+                            borderRadius: "8px",
+                            width: "500px", // 增加宽度以容纳更多内容
+                            maxWidth: "90vw"
+                        }}>
+                            <h3 style={{ marginBottom: "16px" }}>数据导入配置</h3>
+
+                            {/* trigger link输入框 */}
+                            <div style={{ marginBottom: "16px" }}>
+                                <label style={{ fontSize: 14, fontWeight: 500, display: "block", marginBottom: "4px" }}>
+                                    trigger link:
+                                </label>
+                                <input
+                                    type="text"
+                                    value={triggerLink}
+                                    onChange={(e) => setTriggerLink(e.target.value)}
+                                    placeholder="请输入trigger link"
+                                    style={{
+                                        width: "100%",
+                                        padding: "8px 12px",
+                                        border: "1px solid #ddd",
+                                        borderRadius: "4px",
+                                        fontSize: "14px"
+                                    }}
+                                />
+                            </div>
+
+                            {/* 测试平台下拉框 */}
+                            <div style={{ marginBottom: "16px" }}>
+                                <label style={{ fontSize: 14, fontWeight: 500, display: "block", marginBottom: "4px" }}>
+                                    测试平台:
+                                </label>
+                                <select
+                                    value={testPlatform}
+                                    onChange={(e) => setTestPlatform(e.target.value)}
+                                    style={{
+                                        width: "100%",
+                                        padding: "8px 12px",
+                                        border: "1px solid #ddd",
+                                        borderRadius: "4px",
+                                        fontSize: "14px",
+                                        background: "white"
+                                    }}
+                                >
+                                    <option value="">请选择测试平台</option>
+                                    <option value="arm">arm</option>
+                                    <option value="x86">x86</option>
+                                </select>
+                            </div>
+
+                            {/* 应用数据下拉框 */}
+                            <div style={{ marginBottom: "16px" }}>
+                                <label style={{ fontSize: 14, fontWeight: 500, display: "block", marginBottom: "4px" }}>
+                                    应用数据:
+                                </label>
+                                <select
+                                    value={appData}
+                                    onChange={(e) => setAppData(e.target.value)}
+                                    style={{
+                                        width: "100%",
+                                        padding: "8px 12px",
+                                        border: "1px solid #ddd",
+                                        borderRadius: "4px",
+                                        fontSize: "14px",
+                                        background: "white"
+                                    }}
+                                >
+                                    <option value="">请选择应用数据</option>
+                                    <option value="stop_bar_statistic_with_time">stop_bar_statistic_with_time</option>
+                                    <option value="stop_bar_statistic_without_time">stop_bar_statistic_without_time</option>
+                                </select>
+                            </div>
+
+                            <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+                                <button
+                                    onClick={() => {
+                                        setShowTriggerLinkModal(false);
+                                        setTriggerLink(""); // 清空输入框
+                                        setTestPlatform(""); // 重置测试平台
+                                        setAppData(""); // 重置应用数据
+                                    }}
+                                    style={{
+                                        padding: "8px 16px",
+                                        background: "#6c757d",
+                                        color: "white",
+                                        border: "none",
+                                        borderRadius: "4px",
+                                        cursor: "pointer"
+                                    }}
+                                >
+                                    取消
+                                </button>
+                                <button
+                                    onClick={handleTriggerLinkConfirm}
+                                    disabled={!triggerLink.trim() || !testPlatform || !appData}
+                                    style={{
+                                        padding: "8px 16px",
+                                        background: (triggerLink.trim() && testPlatform && appData) ? "#28a745" : "#ccc",
+                                        color: "white",
+                                        border: "none",
+                                        borderRadius: "4px",
+                                        cursor: (triggerLink.trim() && testPlatform && appData) ? "pointer" : "not-allowed"
+                                    }}
+                                >
+                                    确认
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* 点击外部关闭下拉框的遮罩层 */}
-                {isDropdownOpen && (
+                {(isDropdownOpen || isSceneDropdownOpen) && (
                     <div
                         style={{
                             position: "fixed",
@@ -525,13 +911,35 @@ export default function App() {
                             bottom: 0,
                             zIndex: 1999
                         }}
-                        onClick={() => setIsDropdownOpen(false)}
+                        onClick={() => {
+                            setIsDropdownOpen(false);
+                            setIsSceneDropdownOpen(false);
+                        }}
                     />
                 )}
 
                 <div style={{ paddingTop: 16 }}>
                     {page === "home" && renderCardGrid(BASEINFO_CONFIGS)}
                     {(page === "x86" || page === "arm") && renderDynamicScenes()}
+                    {page === "selftest" && (
+                        <div style={{ padding: "16px", textAlign: "center", color: "#666" }}>
+                            {testVersion && baselineVersion && selectedScenes.length > 0 ? (
+                                <div>
+                                    <h3>自测数据对比</h3>
+                                    <p>test版本: {testVersion}</p>
+                                    <p>baseline版本: {baselineVersion}</p>
+                                    <p>选中的场景: {selectedScenes.join(", ")}</p>
+                                    <p>trigger link: {triggerLink || "未设置"}</p>
+                                    {/* 这里可以添加数据对比图表 */}
+                                </div>
+                            ) : (
+                                <div>
+                                    <h3>自测页面</h3>
+                                    <p>请选择test版本、baseline版本和场景开始自测</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
