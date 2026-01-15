@@ -12,7 +12,7 @@ export default function Sidebar(props: {
         { key: "home", label: "首页" },
         { key: "arm", label: "arm评测" },
         { key: "x86", label: "x86评测" },
-        // { key: "selftest", label: "自测" },
+        { key: "selftest", label: "自测" },
     ];
 
     return (

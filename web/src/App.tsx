@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import Sidebar, { NavKey } from "./components/Sidebar";
 import BaseInfoDrillCard from "./components/BaseInfoDrillCard";
 import SceneChartCard from "./components/SceneChartCard";
+import MultiSelectDropdown from "./components/MultiSelectDropdown";
 import type { BaseInfo, ODVersionItem, ODVersionsResponse } from "./api";
 import { getODVersions, getAllScenes, getSceneData, getMultiVersionSceneData } from "./api/home";
 
@@ -387,151 +388,19 @@ export default function App() {
                     <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
                         {/* 只在arm和x86页面显示多选OD版本下拉框 - 优化为紧凑形式 */}
                         {(page === "arm" || page === "x86") && (
-                            <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
-                                <label style={{ fontSize: 14, fontWeight: 500 }}>OD版本:</label>
-
-                                {/* 自定义下拉选择框 */}
-                                <div style={{ position: "relative", display: "inline-block" }}>
-                                    {/* 下拉框触发按钮 */}
-                                    <button
-                                        onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                                        style={{
-                                            padding: "6px 12px",
-                                            border: "1px solid #ddd",
-                                            borderRadius: "4px",
-                                            fontSize: "12px",
-                                            width: "150px",
-                                            background: "white",
-                                            cursor: "pointer",
-                                            textAlign: "left",
-                                            display: "flex",
-                                            justifyContent: "space-between",
-                                            alignItems: "center"
-                                        }}
-                                    >
-                                        <span>
-                                            {selectedOdVersions.length === 0
-                                                ? "选择版本"
-                                                : selectedOdVersions.length === 1
-                                                    ? selectedOdVersions[0]
-                                                    : `已选 ${selectedOdVersions.length} 个版本`
-                                            }
-                                        </span>
-                                        <span style={{ transform: isDropdownOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>
-                                            ▼
-                                        </span>
-                                    </button>
-
-                                    {/* 下拉菜单 */}
-                                    {isDropdownOpen && (
-                                        <div style={{
-                                            position: "absolute",
-                                            top: "100%",
-                                            left: 0,
-                                            right: 0,
-                                            background: "white",
-                                            border: "1px solid #ddd",
-                                            borderRadius: "4px",
-                                            boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-                                            zIndex: 1000,
-                                            maxHeight: "200px",
-                                            overflowY: "auto",
-                                            marginTop: "2px"
-                                        }}>
-                                            {/* 全选选项 */}
-                                            <div
-                                                style={{
-                                                    padding: "6px 12px",
-                                                    borderBottom: "1px solid #eee",
-                                                    cursor: "pointer",
-                                                    display: "flex",
-                                                    alignItems: "center",
-                                                    gap: "8px",
-                                                    background: selectedOdVersions.length === odVersions.length ? "#f0f8ff" : "white"
-                                                }}
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    toggleSelectAll();
-                                                }}
-                                            >
-                                                <input
-                                                    type="checkbox"
-                                                    checked={selectedOdVersions.length === odVersions.length}
-                                                    readOnly
-                                                    style={{ margin: 0, pointerEvents: "none" }}
-                                                />
-                                                <span style={{ fontSize: "12px", fontWeight: "500" }}>
-                                                    全选 ({odVersions.length})
-                                                </span>
-                                            </div>
-
-                                            {/* 版本列表 */}
-                                            {odVersions.map((item) => (
-                                                <div
-                                                    key={item.od_version_minute}
-                                                    style={{
-                                                        padding: "6px 12px",
-                                                        cursor: "pointer",
-                                                        display: "flex",
-                                                        alignItems: "center",
-                                                        gap: "8px",
-                                                        background: selectedOdVersions.includes(item.od_version_minute) ? "#f0f8ff" : "white"
-                                                    }}
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        toggleVersionSelection(item.od_version_minute);
-                                                    }}
-                                                >
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={selectedOdVersions.includes(item.od_version_minute)}
-                                                        readOnly
-                                                        style={{ margin: 0, pointerEvents: "none" }}
-                                                    />
-                                                    <span style={{ fontSize: "12px" }}>
-                                                        {item.od_version_minute}
-                                                    </span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-
-                                <button
-                                    onClick={handleMultiVersionConfirm}
-                                    disabled={selectedOdVersions.length === 0}
-                                    style={{
-                                        padding: "6px 12px",
-                                        background: selectedOdVersions.length === 0 ? "#ccc" : "#28a745",
-                                        color: "white",
-                                        border: "none",
-                                        borderRadius: "4px",
-                                        cursor: selectedOdVersions.length === 0 ? "not-allowed" : "pointer",
-                                        fontSize: "12px",
-                                        fontWeight: "500"
-                                    }}
-                                >
-                                    确定
-                                </button>
-                                {useMultiVersionMode && (
-                                    <button
-                                        onClick={resetMultiVersionMode}
-                                        style={{
-                                            padding: "6px 12px",
-                                            background: "#dc3545",
-                                            color: "white",
-                                            border: "none",
-                                            borderRadius: "4px",
-                                            cursor: "pointer",
-                                            fontSize: "12px",
-                                            fontWeight: "500"
-                                        }}
-                                    >
-                                        重置
-                                    </button>
-                                )}
-                            </div>
+                            <MultiSelectDropdown
+                                label="OD版本:"
+                                items={odVersions.map((it) => ({ value: it.od_version_minute }))}
+                                selected={selectedOdVersions}
+                                onChange={setSelectedOdVersions}
+                                open={isDropdownOpen}
+                                setOpen={setIsDropdownOpen}
+                                onConfirm={handleMultiVersionConfirm}
+                                onReset={useMultiVersionMode ? resetMultiVersionMode : undefined}
+                                width={220}
+                            />
                         )}
+
 
                         {/* 只在首页显示OD版本下拉框 */}
                         {page === "home" && (
@@ -898,24 +767,6 @@ export default function App() {
                             </div>
                         </div>
                     </div>
-                )}
-
-                {/* 点击外部关闭下拉框的遮罩层 */}
-                {(isDropdownOpen || isSceneDropdownOpen) && (
-                    <div
-                        style={{
-                            position: "fixed",
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            zIndex: 1999
-                        }}
-                        onClick={() => {
-                            setIsDropdownOpen(false);
-                            setIsSceneDropdownOpen(false);
-                        }}
-                    />
                 )}
 
                 <div style={{ paddingTop: 16 }}>

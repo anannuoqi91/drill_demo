@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from typing import Any, Dict, List, Optional, Tuple
 import os
-from psycopg2.extras import execute_values
+# from psycopg2.extras import execute_values
 from ..cache import cache_get, cache_set, stable_dumps
 from ..models.common import TimeRange
 
@@ -59,57 +59,57 @@ async def execute_cached_query(
     return payload
 
 
-async def insert_data_to_db(
-    router: APIRouter,
-    sql: str,
-    records: List[Tuple],
-) -> Dict[str, Any]:
-    """
-    使用execute_values执行批量数据插入操作
+# async def insert_data_to_db(
+#     router: APIRouter,
+#     sql: str,
+#     records: List[Tuple],
+# ) -> Dict[str, Any]:
+#     """
+#     使用execute_values执行批量数据插入操作
 
-    Args:
-        router: FastAPI路由器实例
-        sql: SQL插入语句（包含VALUES占位符）
-        records: 要插入的数据记录列表，每个记录是一个元组
+#     Args:
+#         router: FastAPI路由器实例
+#         sql: SQL插入语句（包含VALUES占位符）
+#         records: 要插入的数据记录列表，每个记录是一个元组
 
-    Returns:
-        插入操作结果字典
-    """
-    async with router.app.state.pg.acquire() as conn:
-        try:
-            # 获取原始同步连接以使用execute_values
-            sync_conn = await conn.get_raw_connection()
+#     Returns:
+#         插入操作结果字典
+#     """
+#     async with router.app.state.pg.acquire() as conn:
+#         try:
+#             # 获取原始同步连接以使用execute_values
+#             sync_conn = await conn.get_raw_connection()
 
-            with sync_conn.cursor() as cur:
-                # 使用execute_values执行批量插入
-                result = execute_values(cur, sql, records, page_size=200)
+#             with sync_conn.cursor() as cur:
+#                 # 使用execute_values执行批量插入
+#                 result = execute_values(cur, sql, records, page_size=200)
 
-                # 提交事务
-                sync_conn.commit()
+#                 # 提交事务
+#                 sync_conn.commit()
 
-            # 解析影响的行数
-            affected_rows = result if result else len(records)
+#             # 解析影响的行数
+#             affected_rows = result if result else len(records)
 
-            return {
-                "success": True,
-                "operation": "batch_insert",
-                "affected_rows": affected_rows,
-                "inserted_count": len(records),
-                "message": f"成功插入 {affected_rows} 条记录"
-            }
+#             return {
+#                 "success": True,
+#                 "operation": "batch_insert",
+#                 "affected_rows": affected_rows,
+#                 "inserted_count": len(records),
+#                 "message": f"成功插入 {affected_rows} 条记录"
+#             }
 
-        except Exception as e:
-            # 发生错误时回滚
-            try:
-                sync_conn.rollback()
-            except:
-                pass
+#         except Exception as e:
+#             # 发生错误时回滚
+#             try:
+#                 sync_conn.rollback()
+#             except:
+#                 pass
 
-            return {
-                "success": False,
-                "operation": "batch_insert",
-                "error": str(e),
-                "affected_rows": 0,
-                "inserted_count": 0,
-                "message": f"插入失败: {str(e)}"
-            }
+#             return {
+#                 "success": False,
+#                 "operation": "batch_insert",
+#                 "error": str(e),
+#                 "affected_rows": 0,
+#                 "inserted_count": 0,
+#                 "message": f"插入失败: {str(e)}"
+#             }
