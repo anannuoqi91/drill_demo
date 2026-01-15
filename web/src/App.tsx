@@ -14,6 +14,7 @@ const BASEINFO_CONFIGS: { key: string; baseinfo: BaseInfo; title: string }[] = [
     { key: "x86_rw", baseinfo: { platform: "x86", data_fix: "_RW_" }, title: "x86 _RW" },
     { key: "x86_re1x", baseinfo: { platform: "x86", data_fix: "_RE1X_" }, title: "x86 _RE1X" },
 ];
+const ENABLE_SELFTEST = false;
 
 // 场景数据接口
 interface SceneData {
@@ -154,6 +155,13 @@ export default function App() {
 
     useEffect(() => {
         // 每张卡片自己会 load，不需要 App 统一 load
+    }, [page]);
+
+
+    useEffect(() => {
+        if (!ENABLE_SELFTEST && page === "selftest") {
+            setPage("home");
+        }
     }, [page]);
 
     // 加载OD版本列表

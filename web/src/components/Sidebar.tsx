@@ -1,6 +1,10 @@
+// Sidebar.tsx
 import React from "react";
 
 export type NavKey = "home" | "x86" | "arm" | "selftest" | "scene";
+
+// ✅ 一行开关
+const ENABLE_SELFTEST = false;
 
 export default function Sidebar(props: {
     active: NavKey;
@@ -12,7 +16,7 @@ export default function Sidebar(props: {
         { key: "home", label: "首页" },
         { key: "arm", label: "arm评测" },
         { key: "x86", label: "x86评测" },
-        { key: "selftest", label: "自测" },
+        ...(ENABLE_SELFTEST ? [{ key: "selftest" as const, label: "自测" }] : []),
     ];
 
     return (
