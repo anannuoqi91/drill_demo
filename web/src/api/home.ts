@@ -37,6 +37,8 @@ export interface ODVersionsResponse {
 
 export interface AllScenesRequest {
   platform: string;
+  /** 评测模块：stopbar_pr / advance_detection_pr / stopbar_absolute / advance_detection_absolute / perception_pr */
+  eval_module?: string;
 }
 
 export interface AllScenesResponse {
@@ -46,6 +48,8 @@ export interface AllScenesResponse {
 export interface SceneDataRequest {
   od_version: string;
   baseinfo: BaseInfo;
+  /** 评测模块：stopbar_pr / advance_detection_pr / stopbar_absolute / advance_detection_absolute / perception_pr */
+  eval_module?: string;
 }
 
 export interface SceneDataResponse {
@@ -55,6 +59,8 @@ export interface SceneDataResponse {
 export interface MultiVersionSceneDataRequest {
   od_versions: string[];
   baseinfo: BaseInfo;
+  /** 评测模块：stopbar_pr / advance_detection_pr / stopbar_absolute / advance_detection_absolute / perception_pr */
+  eval_module?: string;
 }
 
 export interface MultiVersionSceneDataResponse {
@@ -93,10 +99,10 @@ export function queryDirectionLanesPR(req: DirectionLanesPRRequest): Promise<Hom
  * 获取所有场景列表
  */
 export function getAllScenes(req: AllScenesRequest): Promise<AllScenesResponse> {
-  // 后端接口是GET方法，需要将参数作为查询参数传递
-  return getJSON<AllScenesResponse>(`/api/scene/all_scenes?platform=${req.platform}`);
+  const qs = new URLSearchParams({ platform: req.platform });
+  if (req.eval_module) qs.set("eval_module", req.eval_module);
+  return getJSON<AllScenesResponse>(`/api/scene/all_scenes?${qs.toString()}`);
 }
-
 
 /**
  * 获取所有场景的数据

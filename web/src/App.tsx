@@ -1,10 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import Sidebar, { NavKey } from "./components/Sidebar";
+import Sidebar, { NavKey, type Platform, type EvalModule } from "./components/Sidebar";
 import BaseInfoDrillCard from "./components/BaseInfoDrillCard";
 import SceneChartCard from "./components/SceneChartCard";
 import MultiSelectDropdown from "./components/MultiSelectDropdown";
-import SelfTestPanel from "./components/selftest/SelfTestPanel";
-
 import type { BaseInfo, ODVersionItem, ODVersionsResponse } from "./api";
 import { getODVersions, getAllScenes, getSceneData, getMultiVersionSceneData } from "./api/home";
 
@@ -17,62 +15,54 @@ const BASEINFO_CONFIGS: { key: string; baseinfo: BaseInfo; title: string }[] = [
     { key: "x86_re1x", baseinfo: { platform: "x86", data_fix: "_RE1X_" }, title: "x86 _RE1X" },
 ];
 
-const ENABLE_SELFTEST = false;
-
-interface SceneData {
+interface SceneDataState {
     scene_name: string;
     data: Record<string, any>[];
     loading: boolean;
     error?: string;
 }
 
-type Platform = "arm" | "x86";
+function parsePage(page: NavKey): { kind: "home" } | { kind: "eval"; evalModule: EvalModule; platform: Platform } {
+    if (page === "home") return { kind: "home" };
+
+    // 兼容旧链接：arm/x86 -> stopbar_pr:*
+    if (page === "arm") return { kind: "eval", evalModule: "stopbar_pr", platform: "arm" };
+    if (page === "x86") return { kind: "eval", evalModule: "stopbar_pr", platform: "x86" };
+
+    const [m, p] = page.split(":");
+    return { kind: "eval", evalModule: m as EvalModule, platform: p as Platform };
+}
 
 export default function App() {
     const [page, setPage] = useState<NavKey>("home");
+    const pageInfo = useMemo(() => parsePage(page), [page]);
 
     // OD versions
     const [odVersions, setOdVersions] = useState<ODVersionItem[]>([]);
     const [selectedOdVersion, setSelectedOdVersion] = useState<string>("");
 
-    // arm/x86 页面数据
-    const [currentPlatform, setCurrentPlatform] = useState<Platform | "">("");
-    const [platformScenes, setPlatformScenes] = useState<string[]>([]);
-    const [allSceneData, setAllSceneData] = useState<Record<string, any>[]>([]);
-    const [scenesData, setScenesData] = useState<SceneData[]>([]);
-
-    // 多版本：UI选中（勾选过程不触发请求）
-    const [selectedOdVersions, setSelectedOdVersions] = useState<string[]>([]);
+    // 平台页：多选版本（pending -> confirm -> active）
+    const [pendingOdVersions, setPendingOdVersions] = useState<string[]>([]);
+    const [activeOdVersions, setActiveOdVersions] = useState<string[]>([]);
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
-    // 多版本：实际生效查询（只有 Confirm/Reset/Refresh 才会改变 -> 触发请求）
-    const [activeMultiMode, setActiveMultiMode] = useState(false);
-    const [activeOdVersions, setActiveOdVersions] = useState<string[]>([]);
+    const useMultiVersionMode = activeOdVersions.length > 0;
 
-    // 触发 arm/x86 数据整体重载
-    const [platformReloadNonce, setPlatformReloadNonce] = useState(0);
+    // 平台页数据
+    const [platformScenes, setPlatformScenes] = useState<string[]>([]);
+    const [allSceneData, setAllSceneData] = useState<Record<string, any>[]>([]);
+    const [scenesData, setScenesData] = useState<SceneDataState[]>([]);
+    const [platformLoading, setPlatformLoading] = useState(false);
+    const [reloadNonce, setReloadNonce] = useState(0);
 
-    // selftest reset
-    const [selfTestResetNonce, setSelfTestResetNonce] = useState(0);
-
-    // 场景列表缓存：避免重复请求 getAllScenes
+    // 场景列表缓存：避免来回切页重复拉 scenes
     const scenesCacheRef = useRef<Record<Platform, string[]>>({ arm: [], x86: [] });
     const scenesLoadedRef = useRef<Record<Platform, boolean>>({ arm: false, x86: false });
 
     // 防并发回写
     const requestSeqRef = useRef(0);
 
-    const isPlatformPage = page === "arm" || page === "x86";
-    const platform: Platform | null = isPlatformPage ? (page as Platform) : null;
-
-    // selftest 开关保护
-    useEffect(() => {
-        if (!ENABLE_SELFTEST && page === "selftest") {
-            setPage("home");
-        }
-    }, [page]);
-
-    // 只加载一次 OD versions
+    // 加载 OD versions（一次）
     useEffect(() => {
         let cancelled = false;
         (async () => {
@@ -80,9 +70,7 @@ export default function App() {
                 const response: ODVersionsResponse = await getODVersions();
                 if (cancelled) return;
                 setOdVersions(response.rows);
-                if (response.rows.length > 0) {
-                    setSelectedOdVersion(response.rows[0].od_version_minute);
-                }
+                if (response.rows.length > 0) setSelectedOdVersion(response.rows[0].od_version_minute);
             } catch (e) {
                 console.error("加载OD版本列表失败:", e);
             }
@@ -92,54 +80,62 @@ export default function App() {
         };
     }, []);
 
-    // ========== 核心重构：arm/x86 只用一个 useEffect，串行完成 scenes + data ==========
+    // 平台页：仅 stopbar_pr 实现；且避免闪屏（不清空列表，只做 loading 覆盖）
     useEffect(() => {
-        if (!platform) {
-            // 离开 arm/x86 页时清空（selftest 不依赖这些）
-            setCurrentPlatform("");
-            setPlatformScenes([]);
-            setAllSceneData([]);
-            setScenesData([]);
-            return;
-        }
-
-        setCurrentPlatform(platform);
-
         const seq = ++requestSeqRef.current;
         const controller = new AbortController();
 
-        const run = async () => {
+        // home：清空平台态
+        if (pageInfo.kind !== "eval") {
+            setPlatformLoading(false);
+            setPlatformScenes([]);
+            setAllSceneData([]);
+            setScenesData([]);
+            return () => controller.abort();
+        }
+
+        // ✅ 仅实现 stopbar_pr
+        if (pageInfo.evalModule !== "stopbar_pr") {
+            setPlatformLoading(false);
+            // 不请求，给出空数据即可
+            setPlatformScenes([]);
+            setAllSceneData([]);
+            setScenesData([]);
+            return () => controller.abort();
+        }
+
+        const platform = pageInfo.platform;
+
+        (async () => {
             try {
-                // 1) scenes：优先走缓存
+                setPlatformLoading(true);
+
+                // 1) scenes：优先缓存（避免切页时“空一下”）
                 let sceneNames: string[] = [];
-                const cached = scenesLoadedRef.current[platform];
-                if (cached) {
+                const cachedLoaded = scenesLoadedRef.current[platform];
+
+                if (cachedLoaded) {
                     sceneNames = scenesCacheRef.current[platform];
+                    // 如果当前 state 为空，用缓存立即填充，避免闪屏
+                    if (platformScenes.length === 0) setPlatformScenes(sceneNames);
+                    if (scenesData.length === 0 && sceneNames.length > 0) {
+                        setScenesData(sceneNames.map((s) => ({ scene_name: s, data: [], loading: true })));
+                    }
                 } else {
                     const resp = await getAllScenes({ platform });
-                    if (controller.signal.aborted) return;
+                    if (controller.signal.aborted || seq !== requestSeqRef.current) return;
+
                     sceneNames = (resp.rows ?? []).map((r: any) => r.scene_name).filter(Boolean);
                     scenesCacheRef.current[platform] = sceneNames;
                     scenesLoadedRef.current[platform] = true;
+
+                    setPlatformScenes(sceneNames);
+                    setScenesData(sceneNames.map((s) => ({ scene_name: s, data: [], loading: true })));
                 }
 
-                // 如果这次请求已经过期，直接退出
-                if (controller.signal.aborted || seq !== requestSeqRef.current) return;
-
-                setPlatformScenes(sceneNames);
-
-                // 2) 先把每个场景置为 loading（用户体验）
-                setScenesData(
-                    sceneNames.map((name) => ({
-                        scene_name: name,
-                        data: [],
-                        loading: true,
-                    }))
-                );
-
-                // 3) data：按 activeQuery 决定用哪个 API
+                // 2) data
                 const resp =
-                    activeMultiMode && activeOdVersions.length > 0
+                    useMultiVersionMode && activeOdVersions.length > 0
                         ? await getMultiVersionSceneData({
                             od_versions: activeOdVersions,
                             baseinfo: { platform, data_fix: "_FK_" },
@@ -154,7 +150,7 @@ export default function App() {
                 const rows = resp.rows ?? [];
                 setAllSceneData(rows);
 
-                // 4) 高效分组（避免 N 个场景 * filter 全量 rows）
+                // 分组
                 const byScene = new Map<string, Record<string, any>[]>();
                 for (const r of rows) {
                     const name = r?.scene_name;
@@ -164,7 +160,7 @@ export default function App() {
                     else byScene.set(name, [r]);
                 }
 
-                const merged: SceneData[] = sceneNames.map((name) => ({
+                const merged: SceneDataState[] = sceneNames.map((name) => ({
                     scene_name: name,
                     data: byScene.get(name) ?? [],
                     loading: false,
@@ -174,88 +170,96 @@ export default function App() {
             } catch (e: any) {
                 if (controller.signal.aborted || seq !== requestSeqRef.current) return;
 
-                console.error(`加载${platform}数据失败:`, e);
+                console.error("加载平台页数据失败:", e);
+                const msg = e instanceof Error ? e.message : String(e);
 
-                const sceneNames =
-                    scenesLoadedRef.current[platform] ? scenesCacheRef.current[platform] : [];
+                // 保留 scenes 列表（如果有），只标记 error，避免闪屏
+                const names =
+                    scenesLoadedRef.current[platform] ? scenesCacheRef.current[platform] : platformScenes;
 
-                setPlatformScenes(sceneNames);
                 setAllSceneData([]);
                 setScenesData(
-                    sceneNames.map((name) => ({
+                    (names ?? []).map((name) => ({
                         scene_name: name,
                         data: [],
                         loading: false,
-                        error: `加载失败: ${String(e)}`,
+                        error: `加载失败: ${msg}`,
                     }))
                 );
+            } finally {
+                if (!controller.signal.aborted && seq === requestSeqRef.current) {
+                    setPlatformLoading(false);
+                }
             }
-        };
+        })();
 
-        run();
+        return () => controller.abort();
+        // 注意：platformScenes/scenesData 不要放依赖里，否则会重复触发
+    }, [pageInfo.kind, pageInfo.kind === "eval" ? pageInfo.evalModule : null, pageInfo.kind === "eval" ? pageInfo.platform : null, reloadNonce, useMultiVersionMode, activeOdVersions]);
 
-        return () => {
-            controller.abort();
-        };
-    }, [platform, platformReloadNonce, activeMultiMode, activeOdVersions]);
-
-    // Confirm：让当前勾选的版本变成“生效查询”，并触发 reload
+    // Confirm/Reset
     const handleMultiVersionConfirm = () => {
-        if (selectedOdVersions.length === 0) return;
-        setActiveMultiMode(true);
-        setActiveOdVersions([...selectedOdVersions]);
-        setPlatformReloadNonce((x) => x + 1);
-    };
-
-    // Reset：退出多版本模式并触发 reload
-    const resetMultiVersionMode = () => {
-        setActiveMultiMode(false);
-        setActiveOdVersions([]);
-        setSelectedOdVersions([]);
+        if (pendingOdVersions.length === 0) return;
+        setActiveOdVersions([...pendingOdVersions]);
         setIsDropdownOpen(false);
-        setPlatformReloadNonce((x) => x + 1);
+        setReloadNonce((x) => x + 1);
     };
 
-    // 顶栏刷新
+    const resetMultiVersionMode = () => {
+        setActiveOdVersions([]);
+        setPendingOdVersions([]);
+        setIsDropdownOpen(false);
+        setReloadNonce((x) => x + 1);
+    };
+
     const handleRefresh = () => {
-        if (page === "arm" || page === "x86") {
-            setPlatformReloadNonce((x) => x + 1);
-        } else if (page === "selftest") {
-            setSelfTestResetNonce((x) => x + 1);
-        } else {
-            window.location.reload();
+        if (pageInfo.kind === "eval" && pageInfo.evalModule === "stopbar_pr") {
+            setReloadNonce((x) => x + 1);
+            return;
         }
+        window.location.reload();
     };
 
-    const renderCardGrid = (configs: typeof BASEINFO_CONFIGS) => (
+    const headerTitle = useMemo(() => {
+        if (pageInfo.kind === "home") return "首页";
+        if (pageInfo.evalModule !== "stopbar_pr") return "暂未实现";
+        return `stopbar pr - ${pageInfo.platform}评测`;
+    }, [pageInfo]);
+
+    const headerSubText = useMemo(() => {
+        if (pageInfo.kind === "home") return "默认显示OD最近版本的评测结果";
+        if (pageInfo.evalModule !== "stopbar_pr") return "该模块暂未实现";
+        const versions = useMultiVersionMode ? `显示版本: ${activeOdVersions.join(", ")}` : "默认显示最新版本";
+        return `${pageInfo.platform}平台 - 共 ${platformScenes.length} 个场景，总数据: ${allSceneData.length} 条，${versions}`;
+    }, [pageInfo, useMultiVersionMode, activeOdVersions, platformScenes.length, allSceneData.length]);
+
+    const renderHome = () => (
         <div style={{ padding: 16, display: "grid", gridTemplateColumns: "1fr", gap: 16 }}>
-            {configs.map((cfg) => (
-                <BaseInfoDrillCard
-                    key={cfg.key}
-                    title={cfg.title}
-                    baseinfo={cfg.baseinfo}
-                    selectedOdVersion={selectedOdVersion}
-                />
+            {BASEINFO_CONFIGS.map((cfg) => (
+                <BaseInfoDrillCard key={cfg.key} title={cfg.title} baseinfo={cfg.baseinfo} selectedOdVersion={selectedOdVersion} />
             ))}
         </div>
     );
 
-    const renderDynamicScenes = () => {
-        if (!platform) return null;
-
+    const renderStopbarPlatform = () => {
+        // 这里用 platformLoading + 保留旧数据，避免闪屏
         if (platformScenes.length === 0 && scenesData.length === 0) {
-            return <div style={{ padding: 16, textAlign: "center" }}>正在加载场景数据...</div>;
+            return (
+                <div style={{ padding: 16, minHeight: 240, display: "flex", alignItems: "center", justifyContent: "center", color: "#666" }}>
+                    {platformLoading ? "正在加载场景..." : "暂无场景数据"}
+                </div>
+            );
         }
 
         return (
             <div style={{ padding: 16, display: "grid", gridTemplateColumns: "1fr", gap: 16 }}>
-                {scenesData.map((sceneData, index) => (
+                {scenesData.map((sceneData, idx) => (
                     <SceneChartCard
-                        key={`${platform}:${sceneData.scene_name}`}
+                        key={`${pageInfo.kind === "eval" ? pageInfo.platform : "na"}:${sceneData.scene_name}`}
                         sceneName={sceneData.scene_name}
-                        platform={platform}
+                        platform={(pageInfo.kind === "eval" ? pageInfo.platform : "arm") as "arm" | "x86"}
                         sceneData={sceneData.data}
-                        index={index}
+                        index={idx}
                         totalScenes={platformScenes.length}
                         loading={sceneData.loading}
                         error={sceneData.error}
@@ -265,19 +269,6 @@ export default function App() {
             </div>
         );
     };
-
-    const headerSubtext = useMemo(() => {
-        if ((page === "arm" || page === "x86") && platformScenes.length > 0) {
-            const modeText =
-                activeMultiMode && activeOdVersions.length > 0
-                    ? `，显示版本: ${activeOdVersions.join(", ")}`
-                    : "，默认显示最新版本";
-
-            return `${currentPlatform}平台 - 共 ${platformScenes.length} 个场景，总数据: ${allSceneData.length} 条${modeText}`;
-        }
-        if (page === "selftest") return "自测数据对比分析";
-        return "默认显示OD最近版本的评测结果";
-    }, [page, platformScenes.length, activeMultiMode, activeOdVersions, currentPlatform, allSceneData.length]);
 
     return (
         <div style={{ display: "flex", minHeight: "100vh", fontFamily: "system-ui, Arial" }}>
@@ -301,50 +292,34 @@ export default function App() {
                     }}
                 >
                     <div>
-                        <div style={{ fontSize: 18, fontWeight: 700 }}>
-                            {page === "home"
-                                ? "首页"
-                                : page === "arm"
-                                    ? "arm评测"
-                                    : page === "x86"
-                                        ? "x86评测"
-                                        : page === "selftest"
-                                            ? "自测"
-                                            : ""}
-                        </div>
-                        <div style={{ color: "#666", marginTop: 4, fontSize: 12 }}>{headerSubtext}</div>
+                        <div style={{ fontSize: 18, fontWeight: 700 }}>{headerTitle}</div>
+                        <div style={{ color: "#666", marginTop: 4, fontSize: 12 }}>{headerSubText}</div>
                     </div>
 
                     <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                        {/* arm/x86 多选OD版本 */}
-                        {(page === "arm" || page === "x86") && (
+                        {/* 只在 stopbar pr 平台页显示多选 */}
+                        {pageInfo.kind === "eval" && pageInfo.evalModule === "stopbar_pr" && (
                             <MultiSelectDropdown
                                 label="OD版本:"
                                 items={odVersions.map((it) => ({ value: it.od_version_minute }))}
-                                selected={selectedOdVersions}
-                                onChange={setSelectedOdVersions}
+                                selected={pendingOdVersions}
+                                onChange={setPendingOdVersions}
                                 open={isDropdownOpen}
                                 setOpen={setIsDropdownOpen}
                                 onConfirm={handleMultiVersionConfirm}
-                                onReset={activeMultiMode ? resetMultiVersionMode : undefined}
-                                width={220}
+                                onReset={useMultiVersionMode ? resetMultiVersionMode : undefined}
+                                width={240}
                             />
                         )}
 
-                        {/* home 单选OD版本 */}
-                        {page === "home" && (
+                        {/* 首页单选 */}
+                        {pageInfo.kind === "home" && (
                             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                                 <label style={{ fontSize: 14, fontWeight: 500 }}>OD版本:</label>
                                 <select
                                     value={selectedOdVersion}
                                     onChange={(e) => setSelectedOdVersion(e.target.value)}
-                                    style={{
-                                        padding: "6px 12px",
-                                        border: "1px solid #ddd",
-                                        borderRadius: "4px",
-                                        fontSize: "14px",
-                                        minWidth: "200px",
-                                    }}
+                                    style={{ padding: "6px 12px", border: "1px solid #ddd", borderRadius: "4px", fontSize: "14px", minWidth: "200px" }}
                                 >
                                     {odVersions.map((item) => (
                                         <option key={item.od_version_minute} value={item.od_version_minute}>
@@ -375,14 +350,11 @@ export default function App() {
 
                 {/* 内容区 */}
                 <div style={{ paddingTop: 16 }}>
-                    {page === "home" && renderCardGrid(BASEINFO_CONFIGS)}
-                    {(page === "x86" || page === "arm") && renderDynamicScenes()}
-
-                    {page === "selftest" && (
-                        <div style={{ padding: 16 }}>
-                            <SelfTestPanel odVersions={odVersions} resetNonce={selfTestResetNonce} />
-                        </div>
+                    {pageInfo.kind === "home" && renderHome()}
+                    {pageInfo.kind === "eval" && pageInfo.evalModule !== "stopbar_pr" && (
+                        <div style={{ padding: 16, color: "#666" }}>该模块暂未实现</div>
                     )}
+                    {pageInfo.kind === "eval" && pageInfo.evalModule === "stopbar_pr" && renderStopbarPlatform()}
                 </div>
             </div>
         </div>

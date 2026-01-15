@@ -3,12 +3,12 @@
  */
 
 // 导出通用工具函数
-export { postJSON, type BaseInfo } from "./common";
+export { postJSON, getJSON, type BaseInfo } from "./common";
 
 // 导出首页相关 API
-export { 
-  queryHomeSeries, 
-  querySceneDirectionsPR, 
+export {
+  queryHomeSeries,
+  querySceneDirectionsPR,
   queryDirectionLanesPR,
   getODVersions,
   getAllScenes,
@@ -17,9 +17,8 @@ export {
   type DirectionLanesPRRequest,
   type HomeAPIResponse,
   type ODVersionItem,
-  type ODVersionsResponse
+  type ODVersionsResponse,
 } from "./home";
-
 
 // 导出详情查询 API
 export { queryDetail } from "./query";
