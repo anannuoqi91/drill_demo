@@ -12,7 +12,7 @@ interface Props {
 }
 
 
-export default function BaseInfoDrillCard(props: { title: string; baseinfo: BaseInfo }) {
+export default function BaseInfoDrillCard(props: Props) {
     const { title, baseinfo, selectedOdVersion } = props;
 
     const [level, setLevel] = useState<HomeLevel>("scene");

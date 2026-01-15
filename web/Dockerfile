@@ -1,8 +1,7 @@
-# build
 FROM node:20-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm ci --only=production && npm cache clean --force
+RUN npm ci && npm cache clean --force
 COPY . /app
 RUN npm run build
 
