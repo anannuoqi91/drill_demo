@@ -4,7 +4,7 @@ import ReactECharts from "echarts-for-react";
 type Row = Record<string, any>;
 
 export default function HomeLineChart(props: {
-    title: string;
+    title?: string;
     subtext?: string;
     rows: Row[];
     xKey: "od_version_minute" | "scene_name" | "direction" | "lane";

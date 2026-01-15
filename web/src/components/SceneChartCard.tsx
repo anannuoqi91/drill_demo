@@ -196,7 +196,22 @@ export default function SceneChartCard(props: SceneChartCardProps) {
     const tableData = useMemo(() => {
         if (!sceneData.length) return [];
 
-        const groupedData = new Map<string, any>();
+        type VersionAgg = {
+            od_version_minute: string;
+            od_version?: string;
+            gt: number;
+            tp: number;
+            fp: number;
+            fn: number;
+        };
+
+        type GroupAgg = {
+            direction: string;
+            lane: string | number;
+            versions: Map<string, VersionAgg>;
+        };
+
+        const groupedData = new Map<string, GroupAgg>();
 
         sceneData.forEach((row) => {
             if (!row.direction || !row.lane || !row.od_version_minute) return;

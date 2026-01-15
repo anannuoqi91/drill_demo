@@ -12,7 +12,6 @@ export {
   queryDirectionLanesPR,
   getODVersions,
   getAllScenes,
-  type BaseInfo,
   type HomeSeriesRequest,
   type SceneDirectionPRRequest,
   type DirectionLanesPRRequest,
