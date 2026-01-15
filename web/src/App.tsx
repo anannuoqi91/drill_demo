@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Sidebar, { NavKey } from "./components/Sidebar";
 import BaseInfoDrillCard from "./components/BaseInfoDrillCard";
 import SceneChartCard from "./components/SceneChartCard";
@@ -26,178 +26,200 @@ interface SceneData {
     error?: string;
 }
 
+type Platform = "arm" | "x86";
+
 export default function App() {
     const [page, setPage] = useState<NavKey>("home");
 
+    // OD versions
     const [odVersions, setOdVersions] = useState<ODVersionItem[]>([]);
     const [selectedOdVersion, setSelectedOdVersion] = useState<string>("");
 
+    // arm/x86 页面数据
+    const [currentPlatform, setCurrentPlatform] = useState<Platform | "">("");
     const [platformScenes, setPlatformScenes] = useState<string[]>([]);
-    const [currentPlatform, setCurrentPlatform] = useState<"arm" | "x86" | "">("");
-
     const [allSceneData, setAllSceneData] = useState<Record<string, any>[]>([]);
     const [scenesData, setScenesData] = useState<SceneData[]>([]);
-    const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-    // 多选OD版本
+    // 多版本：UI选中（勾选过程不触发请求）
     const [selectedOdVersions, setSelectedOdVersions] = useState<string[]>([]);
-    const [useMultiVersionMode, setUseMultiVersionMode] = useState(false);
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
-    // selftest：用于触发子组件 reset
+    // 多版本：实际生效查询（只有 Confirm/Reset/Refresh 才会改变 -> 触发请求）
+    const [activeMultiMode, setActiveMultiMode] = useState(false);
+    const [activeOdVersions, setActiveOdVersions] = useState<string[]>([]);
+
+    // 触发 arm/x86 数据整体重载
+    const [platformReloadNonce, setPlatformReloadNonce] = useState(0);
+
+    // selftest reset
     const [selfTestResetNonce, setSelfTestResetNonce] = useState(0);
 
+    // 场景列表缓存：避免重复请求 getAllScenes
+    const scenesCacheRef = useRef<Record<Platform, string[]>>({ arm: [], x86: [] });
+    const scenesLoadedRef = useRef<Record<Platform, boolean>>({ arm: false, x86: false });
+
+    // 防并发回写
+    const requestSeqRef = useRef(0);
+
+    const isPlatformPage = page === "arm" || page === "x86";
+    const platform: Platform | null = isPlatformPage ? (page as Platform) : null;
+
+    // selftest 开关保护
     useEffect(() => {
         if (!ENABLE_SELFTEST && page === "selftest") {
             setPage("home");
         }
     }, [page]);
 
-    // 加载OD版本列表
+    // 只加载一次 OD versions
     useEffect(() => {
-        const loadODVersions = async () => {
+        let cancelled = false;
+        (async () => {
             try {
                 const response: ODVersionsResponse = await getODVersions();
+                if (cancelled) return;
                 setOdVersions(response.rows);
                 if (response.rows.length > 0) {
                     setSelectedOdVersion(response.rows[0].od_version_minute);
                 }
-            } catch (error) {
-                console.error("加载OD版本列表失败:", error);
+            } catch (e) {
+                console.error("加载OD版本列表失败:", e);
             }
+        })();
+        return () => {
+            cancelled = true;
         };
-        loadODVersions();
     }, []);
 
-    // 多版本确定
-    const handleMultiVersionConfirm = () => {
-        if (selectedOdVersions.length > 0) {
-            setUseMultiVersionMode(true);
-
-            // 设置 loading
-            const loadingScenesData = platformScenes.map((sceneName) => ({
-                scene_name: sceneName,
-                data: [],
-                loading: true,
-            }));
-            setScenesData(loadingScenesData);
-
-            setRefreshTrigger((prev) => prev + 1);
-        }
-    };
-
-    const resetMultiVersionMode = () => {
-        setUseMultiVersionMode(false);
-        setSelectedOdVersions([]);
-        setIsDropdownOpen(false);
-
-        const loadingScenesData = platformScenes.map((sceneName) => ({
-            scene_name: sceneName,
-            data: [],
-            loading: true,
-        }));
-        setScenesData(loadingScenesData);
-
-        setRefreshTrigger((prev) => prev + 1);
-    };
-
-    // 加载平台场景列表（arm/x86 页）
+    // ========== 核心重构：arm/x86 只用一个 useEffect，串行完成 scenes + data ==========
     useEffect(() => {
-        const loadPlatformScenes = async () => {
-            if (page === "arm" || page === "x86") {
-                const platform = page;
-                setCurrentPlatform(platform);
+        if (!platform) {
+            // 离开 arm/x86 页时清空（selftest 不依赖这些）
+            setCurrentPlatform("");
+            setPlatformScenes([]);
+            setAllSceneData([]);
+            setScenesData([]);
+            return;
+        }
 
-                try {
-                    const response = await getAllScenes({ platform });
-                    const sceneNames = response.rows.map((row: any) => row.scene_name).filter(Boolean);
-                    setPlatformScenes(sceneNames);
+        setCurrentPlatform(platform);
 
-                    const initialScenesData: SceneData[] = sceneNames.map((sceneName: string) => ({
-                        scene_name: sceneName,
+        const seq = ++requestSeqRef.current;
+        const controller = new AbortController();
+
+        const run = async () => {
+            try {
+                // 1) scenes：优先走缓存
+                let sceneNames: string[] = [];
+                const cached = scenesLoadedRef.current[platform];
+                if (cached) {
+                    sceneNames = scenesCacheRef.current[platform];
+                } else {
+                    const resp = await getAllScenes({ platform });
+                    if (controller.signal.aborted) return;
+                    sceneNames = (resp.rows ?? []).map((r: any) => r.scene_name).filter(Boolean);
+                    scenesCacheRef.current[platform] = sceneNames;
+                    scenesLoadedRef.current[platform] = true;
+                }
+
+                // 如果这次请求已经过期，直接退出
+                if (controller.signal.aborted || seq !== requestSeqRef.current) return;
+
+                setPlatformScenes(sceneNames);
+
+                // 2) 先把每个场景置为 loading（用户体验）
+                setScenesData(
+                    sceneNames.map((name) => ({
+                        scene_name: name,
                         data: [],
                         loading: true,
-                    }));
-                    setScenesData(initialScenesData);
-                } catch (error) {
-                    console.error(`加载${platform}场景列表失败:`, error);
-                    setPlatformScenes([]);
-                    setScenesData([]);
-                }
-            } else {
-                // 注意：selftest 页不依赖 platformScenes 了，可以继续清空
-                setPlatformScenes([]);
-                setCurrentPlatform("");
-                setScenesData([]);
-                setAllSceneData([]);
-            }
-        };
+                    }))
+                );
 
-        loadPlatformScenes();
-    }, [page, refreshTrigger]);
-
-    // 加载所有场景数据（arm/x86 页）
-    useEffect(() => {
-        const loadAllSceneData = async () => {
-            if ((page === "arm" || page === "x86") && platformScenes.length > 0) {
-                const platform = page;
-
-                try {
-                    if (useMultiVersionMode && selectedOdVersions.length > 0) {
-                        const response = await getMultiVersionSceneData({
-                            od_versions: selectedOdVersions,
+                // 3) data：按 activeQuery 决定用哪个 API
+                const resp =
+                    activeMultiMode && activeOdVersions.length > 0
+                        ? await getMultiVersionSceneData({
+                            od_versions: activeOdVersions,
                             baseinfo: { platform, data_fix: "_FK_" },
-                        });
-
-                        setAllSceneData(response.rows);
-
-                        const filteredScenesData = platformScenes.map((sceneName) => {
-                            const sceneData = response.rows.filter((row: any) => row.scene_name === sceneName);
-                            return { scene_name: sceneName, data: sceneData, loading: false };
-                        });
-
-                        setScenesData(filteredScenesData);
-                    } else {
-                        const response = await getSceneData({
+                        })
+                        : await getSceneData({
                             od_version: "latest",
                             baseinfo: { platform, data_fix: "_FK_" },
                         });
 
-                        setAllSceneData(response.rows);
+                if (controller.signal.aborted || seq !== requestSeqRef.current) return;
 
-                        const filteredScenesData = platformScenes.map((sceneName) => {
-                            const sceneData = response.rows.filter((row: any) => row.scene_name === sceneName);
-                            return { scene_name: sceneName, data: sceneData, loading: false };
-                        });
+                const rows = resp.rows ?? [];
+                setAllSceneData(rows);
 
-                        setScenesData(filteredScenesData);
-                    }
-                } catch (error) {
-                    console.error(`加载场景数据失败:`, error);
-                    const errorScenesData = platformScenes.map((sceneName) => ({
-                        scene_name: sceneName,
+                // 4) 高效分组（避免 N 个场景 * filter 全量 rows）
+                const byScene = new Map<string, Record<string, any>[]>();
+                for (const r of rows) {
+                    const name = r?.scene_name;
+                    if (!name) continue;
+                    const arr = byScene.get(name);
+                    if (arr) arr.push(r);
+                    else byScene.set(name, [r]);
+                }
+
+                const merged: SceneData[] = sceneNames.map((name) => ({
+                    scene_name: name,
+                    data: byScene.get(name) ?? [],
+                    loading: false,
+                }));
+
+                setScenesData(merged);
+            } catch (e: any) {
+                if (controller.signal.aborted || seq !== requestSeqRef.current) return;
+
+                console.error(`加载${platform}数据失败:`, e);
+
+                const sceneNames =
+                    scenesLoadedRef.current[platform] ? scenesCacheRef.current[platform] : [];
+
+                setPlatformScenes(sceneNames);
+                setAllSceneData([]);
+                setScenesData(
+                    sceneNames.map((name) => ({
+                        scene_name: name,
                         data: [],
                         loading: false,
-                        error: `加载失败: ${error}`,
-                    }));
-                    setScenesData(errorScenesData);
-                }
+                        error: `加载失败: ${String(e)}`,
+                    }))
+                );
             }
         };
 
-        loadAllSceneData();
-    }, [page, platformScenes, selectedOdVersion, refreshTrigger, useMultiVersionMode, selectedOdVersions]);
+        run();
 
-    // 刷新按钮
+        return () => {
+            controller.abort();
+        };
+    }, [platform, platformReloadNonce, activeMultiMode, activeOdVersions]);
+
+    // Confirm：让当前勾选的版本变成“生效查询”，并触发 reload
+    const handleMultiVersionConfirm = () => {
+        if (selectedOdVersions.length === 0) return;
+        setActiveMultiMode(true);
+        setActiveOdVersions([...selectedOdVersions]);
+        setPlatformReloadNonce((x) => x + 1);
+    };
+
+    // Reset：退出多版本模式并触发 reload
+    const resetMultiVersionMode = () => {
+        setActiveMultiMode(false);
+        setActiveOdVersions([]);
+        setSelectedOdVersions([]);
+        setIsDropdownOpen(false);
+        setPlatformReloadNonce((x) => x + 1);
+    };
+
+    // 顶栏刷新
     const handleRefresh = () => {
         if (page === "arm" || page === "x86") {
-            const loadingScenesData = platformScenes.map((sceneName) => ({
-                scene_name: sceneName,
-                data: [],
-                loading: true,
-            }));
-            setScenesData(loadingScenesData);
-            setRefreshTrigger((prev) => prev + 1);
+            setPlatformReloadNonce((x) => x + 1);
         } else if (page === "selftest") {
             setSelfTestResetNonce((x) => x + 1);
         } else {
@@ -208,24 +230,30 @@ export default function App() {
     const renderCardGrid = (configs: typeof BASEINFO_CONFIGS) => (
         <div style={{ padding: 16, display: "grid", gridTemplateColumns: "1fr", gap: 16 }}>
             {configs.map((cfg) => (
-                <BaseInfoDrillCard key={cfg.key} title={cfg.title} baseinfo={cfg.baseinfo} selectedOdVersion={selectedOdVersion} />
+                <BaseInfoDrillCard
+                    key={cfg.key}
+                    title={cfg.title}
+                    baseinfo={cfg.baseinfo}
+                    selectedOdVersion={selectedOdVersion}
+                />
             ))}
         </div>
     );
 
     const renderDynamicScenes = () => {
-        if (platformScenes.length === 0 && (page === "arm" || page === "x86")) {
+        if (!platform) return null;
+
+        if (platformScenes.length === 0 && scenesData.length === 0) {
             return <div style={{ padding: 16, textAlign: "center" }}>正在加载场景数据...</div>;
         }
-        if (platformScenes.length === 0) return null;
 
         return (
             <div style={{ padding: 16, display: "grid", gridTemplateColumns: "1fr", gap: 16 }}>
                 {scenesData.map((sceneData, index) => (
                     <SceneChartCard
-                        key={`${currentPlatform}:${sceneData.scene_name}`}
+                        key={`${platform}:${sceneData.scene_name}`}
                         sceneName={sceneData.scene_name}
-                        platform={currentPlatform as "arm" | "x86"}
+                        platform={platform}
                         sceneData={sceneData.data}
                         index={index}
                         totalScenes={platformScenes.length}
@@ -238,13 +266,18 @@ export default function App() {
         );
     };
 
-    const headerSubtext =
-        (page === "arm" || page === "x86") && platformScenes.length > 0
-            ? `${currentPlatform}平台 - 共 ${platformScenes.length} 个场景，总数据: ${allSceneData.length} 条${useMultiVersionMode && selectedOdVersions.length > 0 ? `，显示版本: ${selectedOdVersions.join(", ")}` : "，默认显示最新版本"
-            }`
-            : page === "selftest"
-                ? "自测数据对比分析"
-                : "默认显示OD最近版本的评测结果";
+    const headerSubtext = useMemo(() => {
+        if ((page === "arm" || page === "x86") && platformScenes.length > 0) {
+            const modeText =
+                activeMultiMode && activeOdVersions.length > 0
+                    ? `，显示版本: ${activeOdVersions.join(", ")}`
+                    : "，默认显示最新版本";
+
+            return `${currentPlatform}平台 - 共 ${platformScenes.length} 个场景，总数据: ${allSceneData.length} 条${modeText}`;
+        }
+        if (page === "selftest") return "自测数据对比分析";
+        return "默认显示OD最近版本的评测结果";
+    }, [page, platformScenes.length, activeMultiMode, activeOdVersions, currentPlatform, allSceneData.length]);
 
     return (
         <div style={{ display: "flex", minHeight: "100vh", fontFamily: "system-ui, Arial" }}>
@@ -269,7 +302,15 @@ export default function App() {
                 >
                     <div>
                         <div style={{ fontSize: 18, fontWeight: 700 }}>
-                            {page === "home" ? "首页" : page === "arm" ? "arm评测" : page === "x86" ? "x86评测" : page === "selftest" ? "自测" : ""}
+                            {page === "home"
+                                ? "首页"
+                                : page === "arm"
+                                    ? "arm评测"
+                                    : page === "x86"
+                                        ? "x86评测"
+                                        : page === "selftest"
+                                            ? "自测"
+                                            : ""}
                         </div>
                         <div style={{ color: "#666", marginTop: 4, fontSize: 12 }}>{headerSubtext}</div>
                     </div>
@@ -285,7 +326,7 @@ export default function App() {
                                 open={isDropdownOpen}
                                 setOpen={setIsDropdownOpen}
                                 onConfirm={handleMultiVersionConfirm}
-                                onReset={useMultiVersionMode ? resetMultiVersionMode : undefined}
+                                onReset={activeMultiMode ? resetMultiVersionMode : undefined}
                                 width={220}
                             />
                         )}
