@@ -1,14 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Platform, SceneData } from "../types/eval";
-import { getAllScenes, getSceneData, getMultiVersionSceneData } from "../api/home";
+import {
+  getAllScenes,
+  getSceneData,
+  getMultiVersionSceneData,
+  getSceneDataSpSummary,
+  getMultiVersionSceneDataSpSummary,
+} from "../api/home";
 
 export function usePlatformEval(params: {
   platform: Platform;
   useMultiVersionMode: boolean;
   selectedOdVersions: string[];
   refreshNonce: number;
+  evalModule?: string; // 新增 eval_module 参数
 }) {
-  const { platform, useMultiVersionMode, selectedOdVersions, refreshNonce } = params;
+  const { platform, useMultiVersionMode, selectedOdVersions, refreshNonce, evalModule } = params;
 
   const [platformScenes, setPlatformScenes] = useState<string[]>([]);
   const [scenesData, setScenesData] = useState<SceneData[]>([]);
@@ -26,7 +33,7 @@ export function usePlatformEval(params: {
 
       try {
         // 1) scenes list
-        const sceneResp = await getAllScenes({ platform });
+        const sceneResp = await getAllScenes({ platform, eval_module: evalModule });
         const sceneNames = (sceneResp.rows ?? [])
           .map((r: any) => r.scene_name)
           .filter(Boolean);
@@ -45,15 +52,18 @@ export function usePlatformEval(params: {
         );
 
         // 2) data rows
+        const isStopbarAbsolute = evalModule === "stopbar_absolute";
         const dataResp =
           useMultiVersionMode && selectedOdVersions.length > 0
-            ? await getMultiVersionSceneData({
+            ? await (isStopbarAbsolute ? getMultiVersionSceneDataSpSummary : getMultiVersionSceneData)({
                 od_versions: selectedOdVersions,
                 baseinfo: { platform, data_fix: "_FK_" },
+                eval_module: evalModule, // 传递 eval_module 参数
               })
-            : await getSceneData({
+            : await (isStopbarAbsolute ? getSceneDataSpSummary : getSceneData)({
                 od_version: "latest",
                 baseinfo: { platform, data_fix: "_FK_" },
+                eval_module: evalModule, // 传递 eval_module 参数
               });
 
         if (cancelled) return;
@@ -92,7 +102,7 @@ export function usePlatformEval(params: {
     return () => {
       cancelled = true;
     };
-  }, [platform, refreshNonce, useMultiVersionMode, selectedOdVersions]);
+  }, [platform, refreshNonce, useMultiVersionMode, selectedOdVersions, evalModule]); // 添加 evalModule 依赖
 
   const summaryText = useMemo(() => {
     if (loadingScenes) return "正在加载场景数据...";
@@ -102,8 +112,8 @@ export function usePlatformEval(params: {
       useMultiVersionMode && selectedOdVersions.length > 0
         ? `，显示版本: ${selectedOdVersions.join(", ")}`
         : "，默认显示最新版本"
-    }`;
-  }, [platform, loadingScenes, errorScenes, platformScenes.length, allSceneData.length, useMultiVersionMode, selectedOdVersions]);
+    }${evalModule ? `，评测模块: ${evalModule}` : ""}`; // 添加评测模块信息
+  }, [platform, loadingScenes, errorScenes, platformScenes.length, allSceneData.length, useMultiVersionMode, selectedOdVersions, evalModule]); // 添加 evalModule 依赖
 
   return {
     platformScenes,

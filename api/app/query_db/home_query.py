@@ -89,5 +89,20 @@ SELECT
   date_trunc('minute', od_time) AS od_time_minute
 FROM public.stop_bar_detail_arm
 
+UNION
+
+SELECT 
+  DISTINCT od_version || '-' || to_char(date_trunc('minute', od_time), 'YYYY-MM-DD_HH24:MI') AS od_version_minute,
+  date_trunc('minute', od_time) AS od_time_minute
+FROM public.stop_bar_summary_x86
+
+
+UNION
+
+SELECT 
+  DISTINCT od_version || '-' || to_char(date_trunc('minute', od_time), 'YYYY-MM-DD_HH24:MI') AS od_version_minute,
+  date_trunc('minute', od_time) AS od_time_minute
+FROM public.stop_bar_summary_arm
+
 ORDER BY od_time_minute DESC;
 """

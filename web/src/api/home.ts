@@ -117,3 +117,18 @@ export function getSceneData(req: SceneDataRequest): Promise<SceneDataResponse> 
 export function getMultiVersionSceneData(req: MultiVersionSceneDataRequest): Promise<MultiVersionSceneDataResponse> {
   return postJSON<MultiVersionSceneDataResponse>("/api/scene/multi_version_scene_data", req);
 }
+
+
+/**
+ * 获取stopbar absolute场景数据
+ */
+export function getSceneDataSpSummary(req: SceneDataRequest): Promise<SceneDataResponse> {
+  return postJSON<SceneDataResponse>("/api/scene/scene_data_sp_summary", req);
+}
+
+/**
+ * 获取多版本stopbar absolute场景数据
+ */
+export function getMultiVersionSceneDataSpSummary(req: MultiVersionSceneDataRequest): Promise<MultiVersionSceneDataResponse> {
+  return postJSON<MultiVersionSceneDataResponse>("/api/scene/multi_version_scene_data_sp_summary", req);
+}

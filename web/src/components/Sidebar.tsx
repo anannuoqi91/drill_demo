@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 export type Platform = "arm" | "x86";
 export type EvalModule =
@@ -13,10 +13,11 @@ export type NavKey = "home" | "arm" | "x86" | `${EvalModule}:${Platform}`;
 
 const MODULES: { module: EvalModule; label: string; enabled: boolean }[] = [
     { module: "stopbar_pr", label: "stopbar pr", enabled: true },
-    { module: "advance_detection_pr", label: "advance detection pr", enabled: false },
-    { module: "stopbar_absolute", label: "stopbar absolute", enabled: false },
+    // ✅ stopbar absolute 已实现
+    { module: "stopbar_absolute", label: "stopbar absolute", enabled: true },
     { module: "advance_detection_absolute", label: "advance detection absolute", enabled: false },
     { module: "perception_pr", label: "perception pr", enabled: false },
+    { module: "advance_detection_pr", label: "advance detection pr", enabled: false },
 ];
 
 function toKey(module: EvalModule, platform: Platform): NavKey {
@@ -42,6 +43,15 @@ export default function Sidebar(props: { active: NavKey; onSelect: (k: NavKey) =
         advance_detection_absolute: false,
         perception_pr: false,
     });
+
+    // 当用户通过外部状态切到某个模块页时，确保该模块分组是展开的
+    useEffect(() => {
+        if (activeNormalized === "home") return;
+        const [m] = String(activeNormalized).split(":");
+        const module = m as EvalModule;
+        if (!module) return;
+        setOpen((prev) => (prev[module] ? prev : { ...prev, [module]: true }));
+    }, [activeNormalized]);
 
     const itemStyle = (selected: boolean, disabled = false): React.CSSProperties => ({
         width: "100%",

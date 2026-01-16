@@ -189,3 +189,75 @@ CREATE TABLE IF NOT EXISTS public.stop_bar_summary_arm (
 
 CREATE INDEX IF NOT EXISTS idx_stop_bar_summary_arm_time
   ON stop_bar_summary_arm (od_time);
+
+
+CREATE TABLE IF NOT EXISTS public.advance_detection_summary_arm (
+  id           BIGSERIAL PRIMARY KEY,
+  
+  od_version   TEXT        NOT NULL,
+  scene_name   TEXT        NOT NULL,
+  zone_name    TEXT        NOT NULL,
+  direction    TEXT        NOT NULL,
+
+  ground_truth INTEGER     NOT NULL DEFAULT 0,
+  zone_counted INTEGER     NOT NULL DEFAULT 0,
+
+  -- [0,100]，两位小数
+  abs_rate    NUMERIC(5,2) NOT NULL DEFAULT 0.00,
+
+  -- 精确到秒
+  od_time         TIMESTAMPTZ  NOT NULL,
+
+  -- 精确到秒
+  update_time  TIMESTAMPTZ  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  -- 唯一索引（唯一约束）
+  CONSTRAINT uq_advance_detection_summary_arm UNIQUE (od_version, scene_name, zone_name, direction, od_time),
+
+  -- 约束：precision/recall 在 [0,100]
+  CONSTRAINT ck_advance_detection_summary_abs_rate CHECK (abs_rate >= 0.00 AND abs_rate <= 100.00),
+
+  -- 可选：计数类非负（建议加上，避免脏数据）
+  CONSTRAINT ck_advance_detection_summary_counts_nonneg CHECK (
+    ground_truth >= 0 AND zone_counted >= 0
+  )
+);
+
+CREATE INDEX IF NOT EXISTS idx_advance_detection_summary_arm_time
+  ON advance_detection_summary_arm (od_time);
+
+
+CREATE TABLE IF NOT EXISTS public.advance_detection_summary_x86 (
+  id           BIGSERIAL PRIMARY KEY,
+  
+  od_version   TEXT        NOT NULL,
+  scene_name   TEXT        NOT NULL,
+  zone_name    TEXT        NOT NULL,
+  direction    TEXT        NOT NULL,
+
+  ground_truth INTEGER     NOT NULL DEFAULT 0,
+  zone_counted INTEGER     NOT NULL DEFAULT 0,
+
+  -- [0,100]，两位小数
+  abs_rate    NUMERIC(5,2) NOT NULL DEFAULT 0.00,
+
+  -- 精确到秒
+  od_time         TIMESTAMPTZ  NOT NULL,
+
+  -- 精确到秒
+  update_time  TIMESTAMPTZ  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  -- 唯一索引（唯一约束）
+  CONSTRAINT uq_advance_detection_summary_x86 UNIQUE (od_version, scene_name, zone_name, direction, od_time),
+
+  -- 约束：precision/recall 在 [0,100]
+  CONSTRAINT ck_advance_detection_summary_abs_rate CHECK (abs_rate >= 0.00 AND abs_rate <= 100.00),
+
+  -- 可选：计数类非负（建议加上，避免脏数据）
+  CONSTRAINT ck_advance_detection_summary_counts_nonneg CHECK (
+    ground_truth >= 0 AND zone_counted >= 0
+  )
+);
+
+CREATE INDEX IF NOT EXISTS idx_advance_detection_summary_x86_time
+  ON advance_detection_summary_x86 (od_time);
