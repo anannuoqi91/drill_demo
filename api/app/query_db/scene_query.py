@@ -145,3 +145,71 @@ ORDER BY
   direction,
   lane;
 """
+
+
+LASTEST_QUERY_AD_SUMMARY = """
+SELECT
+  od_version || '-' || to_char(date_trunc('minute', od_time), 'YYYY-MM-DD_HH24:MI') AS od_version_minute,
+  od_version,
+  to_char(date_trunc('minute', od_time), 'YYYY-MM-DD_HH24:MI') AS od_time_minute,
+  scene_name,
+  direction,
+  zone_name,
+  sum(ground_truth) as gt,
+  SUM(zone_counted) as zone_counted
+FROM public.advance_detection_summary_{arch}
+WHERE (scene_name, od_version || '-' || to_char(date_trunc('minute', od_time), 'YYYY-MM-DD_HH24:MI')) IN (
+    SELECT 
+        scene_name,
+        od_version || '-' || to_char(date_trunc('minute', od_time), 'YYYY-MM-DD_HH24:MI') AS od_version_minute
+    FROM (
+        SELECT 
+            scene_name,
+            od_version,
+            date_trunc('minute', od_time) AS od_time_trunc,
+            row_number() OVER (PARTITION BY scene_name ORDER BY date_trunc('minute', od_time) DESC, od_version DESC) AS rn
+        FROM public.advance_detection_summary_{arch}
+        GROUP BY scene_name, od_version, date_trunc('minute', od_time)
+    ) t
+    WHERE t.rn <= 5
+)
+GROUP BY
+  od_version,
+  date_trunc('minute', od_time),
+  scene_name,
+  direction,
+  zone_name
+ORDER BY
+  scene_name,
+  date_trunc('minute', od_time) DESC,
+  od_version DESC,
+  direction,
+  zone_name;
+"""
+
+
+MULTI_VERSION_QUERY_AD_SUMMARY = """
+SELECT
+  od_version || '-' || to_char(date_trunc('minute', od_time), 'YYYY-MM-DD_HH24:MI') AS od_version_minute,
+  od_version,
+  to_char(date_trunc('minute', od_time), 'YYYY-MM-DD_HH24:MI') AS od_time_minute,
+  scene_name,
+  direction,
+  zone_name,
+  sum(ground_truth) as gt,
+  SUM(zone_counted) as zone_counted
+FROM public.advance_detection_summary_{arch}
+WHERE od_version || '-' || to_char(date_trunc('minute', od_time), 'YYYY-MM-DD_HH24:MI') IN ({version_placeholders})
+GROUP BY
+  od_version,
+  date_trunc('minute', od_time),
+  scene_name,
+  direction,
+  zone_name
+ORDER BY
+  scene_name,
+  date_trunc('minute', od_time) DESC,
+  od_version DESC,
+  direction,
+  zone_name;
+"""

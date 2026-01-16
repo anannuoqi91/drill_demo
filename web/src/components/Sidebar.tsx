@@ -13,9 +13,8 @@ export type NavKey = "home" | "arm" | "x86" | `${EvalModule}:${Platform}`;
 
 const MODULES: { module: EvalModule; label: string; enabled: boolean }[] = [
     { module: "stopbar_pr", label: "stopbar pr", enabled: true },
-    // ✅ stopbar absolute 已实现
     { module: "stopbar_absolute", label: "stopbar absolute", enabled: true },
-    { module: "advance_detection_absolute", label: "advance detection absolute", enabled: false },
+    { module: "advance_detection_absolute", label: "advance detection absolute", enabled: true },
     { module: "perception_pr", label: "perception pr", enabled: false },
     { module: "advance_detection_pr", label: "advance detection pr", enabled: false },
 ];

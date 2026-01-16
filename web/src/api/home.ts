@@ -132,3 +132,17 @@ export function getSceneDataSpSummary(req: SceneDataRequest): Promise<SceneDataR
 export function getMultiVersionSceneDataSpSummary(req: MultiVersionSceneDataRequest): Promise<MultiVersionSceneDataResponse> {
   return postJSON<MultiVersionSceneDataResponse>("/api/scene/multi_version_scene_data_sp_summary", req);
 }
+
+/**
+ * 获取advance detection absolute场景数据
+ */
+export function getSceneDataAdSummary(req: SceneDataRequest): Promise<SceneDataResponse> {
+  return postJSON<SceneDataResponse>("/api/scene/scene_data_ad_summary", req);
+}
+
+/**
+ * 获取多版本advance detection absolute场景数据
+ */
+export function getMultiVersionSceneDataAdSummary(req: MultiVersionSceneDataRequest): Promise<MultiVersionSceneDataResponse> {
+  return postJSON<MultiVersionSceneDataResponse>("/api/scene/multi_version_scene_data_ad_summary", req);
+}

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import HomeLineChartAbs from "./HomeLineChartAbs";
 
-interface StopbarAbsoluteCardProps {
+interface AdAbsoluteCardProps {
     sceneName: string;
     platform: "arm" | "x86";
     sceneData: Record<string, any>[];
@@ -24,12 +24,12 @@ type DirectionAggRow = {
 type LaneAggRow = {
     od_version_minute: string;
     direction: string;
-    lane: string;
+    zone_name: string;
     /** 0~1 */
     absolute: number;
 };
 
-export default function StopbarAbsoluteCard(props: StopbarAbsoluteCardProps) {
+export default function AdAbsoluteCard(props: AdAbsoluteCardProps) {
     const { sceneName, sceneData, loading, error, selectedOdVersion } = props;
 
     // chart / table 切换
@@ -118,26 +118,26 @@ export default function StopbarAbsoluteCard(props: StopbarAbsoluteCardProps) {
     const laneChartRows = useMemo<LaneAggRow[]>(() => {
         const map = new Map<
             string,
-            { od_version_minute: string; direction: string; lane: string; gt: number; zone_counted: number }
+            { od_version_minute: string; direction: string; zone_name: string; gt: number; zone_counted: number }
         >();
 
         sceneData.forEach((row) => {
             if (!row.od_version_minute) return;
             if (row.direction === undefined || row.direction === null) return;
-            if (row.lane === undefined || row.lane === null) return;
+            if (row.zone_name === undefined || row.zone_name === null) return;
             if (row.gt === undefined || row.zone_counted === undefined) return;
 
             const od = String(row.od_version_minute);
             const direction = String(row.direction);
-            const lane = String(row.lane);
-            if (!od || !direction || !lane) return;
+            const zone_name = String(row.zone_name);
+            if (!od || !direction || !zone_name) return;
 
-            const key = `${direction}__${lane}__${od}`;
+            const key = `${direction}__${zone_name}__${od}`;
             if (!map.has(key)) {
                 map.set(key, {
                     od_version_minute: od,
                     direction,
-                    lane,
+                    zone_name,
                     gt: 0,
                     zone_counted: 0,
                 });
@@ -153,7 +153,7 @@ export default function StopbarAbsoluteCard(props: StopbarAbsoluteCardProps) {
             result.push({
                 od_version_minute: v.od_version_minute,
                 direction: v.direction,
-                lane: v.lane,
+                zone_name: v.zone_name,
                 absolute: calcAbsolute(v.gt, v.zone_counted),
             });
         }
@@ -162,7 +162,7 @@ export default function StopbarAbsoluteCard(props: StopbarAbsoluteCardProps) {
         return result.sort((a, b) => {
             const v1 = a.direction.localeCompare(b.direction);
             if (v1 !== 0) return v1;
-            const v2 = a.lane.localeCompare(b.lane);
+            const v2 = a.zone_name.localeCompare(b.zone_name);
             if (v2 !== 0) return v2;
             return a.od_version_minute.localeCompare(b.od_version_minute);
         });
@@ -180,7 +180,7 @@ export default function StopbarAbsoluteCard(props: StopbarAbsoluteCardProps) {
 
         type GroupAgg = {
             direction: string;
-            lane: string;
+            zone_name: string;
             versions: Map<string, VersionAgg>;
         };
 
@@ -189,17 +189,17 @@ export default function StopbarAbsoluteCard(props: StopbarAbsoluteCardProps) {
         sceneData.forEach((row) => {
             if (!row.od_version_minute) return;
             if (row.direction === undefined || row.direction === null) return;
-            if (row.lane === undefined || row.lane === null) return;
+            if (row.zone_name === undefined || row.zone_name === null) return;
 
             const direction = String(row.direction);
-            const lane = String(row.lane);
-            if (!direction || !lane) return;
+            const zone_name = String(row.zone_name);
+            if (!direction || !zone_name) return;
 
-            const key = `${direction}_${lane}`;
+            const key = `${direction}_${zone_name}`;
             if (!groupedData.has(key)) {
                 groupedData.set(key, {
                     direction,
-                    lane,
+                    zone_name,
                     versions: new Map<string, VersionAgg>(),
                 });
             }
@@ -224,7 +224,7 @@ export default function StopbarAbsoluteCard(props: StopbarAbsoluteCardProps) {
         for (const [, group] of groupedData) {
             const rowData: any = {
                 direction: group.direction,
-                lane: group.lane,
+                zone_name: group.zone_name,
             };
 
             const sortedVersions = Array.from(group.versions.values()).sort((a, b) =>
@@ -245,7 +245,7 @@ export default function StopbarAbsoluteCard(props: StopbarAbsoluteCardProps) {
         return result.sort((a, b) => {
             const directionCompare = String(a.direction).localeCompare(String(b.direction));
             if (directionCompare !== 0) return directionCompare;
-            return String(a.lane).localeCompare(String(b.lane));
+            return String(a.zone_name).localeCompare(String(b.zone_name));
         });
     }, [sceneData]);
 
@@ -314,7 +314,7 @@ export default function StopbarAbsoluteCard(props: StopbarAbsoluteCardProps) {
                                     direction
                                 </th>
                                 <th rowSpan={2} style={{ border: "1px solid #ddd", padding: "8px", minWidth: 80 }}>
-                                    lane
+                                    zone_name
                                 </th>
                                 {allOdVersions.map((version) => (
                                     <th
@@ -345,7 +345,7 @@ export default function StopbarAbsoluteCard(props: StopbarAbsoluteCardProps) {
                                 tableData.map((row, idx) => (
                                     <tr key={idx} style={{ background: idx % 2 === 0 ? "#fff" : "#f9f9f9" }}>
                                         <td style={{ border: "1px solid #ddd", padding: "8px" }}>{row.direction}</td>
-                                        <td style={{ border: "1px solid #ddd", padding: "8px" }}>{row.lane}</td>
+                                        <td style={{ border: "1px solid #ddd", padding: "8px" }}>{row.zone_name}</td>
 
                                         {allOdVersions.map((version) => {
                                             const abs = row[`${version}_absolute`];
@@ -409,7 +409,7 @@ export default function StopbarAbsoluteCard(props: StopbarAbsoluteCardProps) {
             {/* 图表模式 */}
             {displayMode === "chart" && (
                 <>
-                    {/* direction 下拉（已去掉 lane 下拉） */}
+                    {/* direction 下拉（已去掉 zone_name 下拉） */}
                     {availableDirections.length > 0 && (
                         <div
                             style={{
@@ -499,7 +499,7 @@ export default function StopbarAbsoluteCard(props: StopbarAbsoluteCardProps) {
                                     </div>
                                 )
                             ) : (
-                                // 2) 指定 direction：该方向下按 lane 多条线
+                                // 2) 指定 direction：该方向下按 zone_name 多条线
                                 (() => {
                                     const laneRowsForDir = laneChartRows.filter(
                                         (r) => r.direction === selectedDirectionForChart

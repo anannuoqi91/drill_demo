@@ -74,17 +74,33 @@ export default function ScenesPlatformView(props: {
         }
     };
 
-    const navBtnStyle = (active: boolean): React.CSSProperties => ({
-        padding: "4px 12px",
-        background: active ? "#007bff" : "transparent",
-        border: "1px solid #007bff",
-        borderRadius: 16,
-        color: active ? "white" : "#007bff",
-        fontSize: 12,
-        cursor: "pointer",
-        transition: "all 0.2s",
-        fontWeight: active ? "600" : "normal",
-    });
+    const navBtnStyle = (active: boolean, disabled: boolean): React.CSSProperties => {
+        if (disabled) {
+            return {
+                padding: "4px 12px",
+                background: "#f1f3f5",
+                border: "1px solid #dee2e6",
+                borderRadius: 16,
+                color: "#adb5bd",
+                fontSize: 12,
+                cursor: "not-allowed",
+                fontWeight: "normal",
+                opacity: 0.7,
+            };
+        }
+
+        return {
+            padding: "4px 12px",
+            background: active ? "#007bff" : "transparent",
+            border: "1px solid #007bff",
+            borderRadius: 16,
+            color: active ? "white" : "#007bff",
+            fontSize: 12,
+            cursor: "pointer",
+            transition: "all 0.2s",
+            fontWeight: active ? "600" : "normal",
+        };
+    };
 
     return (
         <>
@@ -104,29 +120,58 @@ export default function ScenesPlatformView(props: {
                         alignItems: "center",
                     }}
                 >
-                    <span style={{ fontSize: 14, fontWeight: 600, color: "#495057", marginRight: 8 }}>
+                    <span
+                        style={{
+                            fontSize: 14,
+                            fontWeight: 600,
+                            color: "#495057",
+                            marginRight: 8,
+                        }}
+                    >
                         场景导航:
                     </span>
 
                     {scenesData.map((scene) => {
                         const active = selectedScene === scene.scene_name;
+                        const hasData = (scene.data?.length ?? 0) > 0;
+                        const disabled = !hasData;
+
                         return (
                             <button
                                 key={`nav:${keyPrefix}:${platform}:${scene.scene_name}`}
-                                onClick={() => handleSceneLinkClick(scene.scene_name)}
-                                style={navBtnStyle(active)}
-                                onMouseEnter={(e) => {
-                                    if (selectedScene !== scene.scene_name) {
-                                        e.currentTarget.style.background = "#007bff";
-                                        e.currentTarget.style.color = "white";
+                                type="button"
+                                disabled={disabled}
+                                onClick={() => {
+                                    if (!disabled) {
+                                        handleSceneLinkClick(scene.scene_name);
                                     }
                                 }}
-                                onMouseLeave={(e) => {
-                                    if (selectedScene !== scene.scene_name) {
-                                        e.currentTarget.style.background = "transparent";
-                                        e.currentTarget.style.color = "#007bff";
-                                    }
-                                }}
+                                style={navBtnStyle(active, disabled)}
+                                onMouseEnter={
+                                    disabled
+                                        ? undefined
+                                        : (e) => {
+                                            if (!active) {
+                                                e.currentTarget.style.background = "#007bff";
+                                                e.currentTarget.style.color = "white";
+                                            }
+                                        }
+                                }
+                                onMouseLeave={
+                                    disabled
+                                        ? undefined
+                                        : (e) => {
+                                            if (!active) {
+                                                e.currentTarget.style.background = "transparent";
+                                                e.currentTarget.style.color = "#007bff";
+                                            }
+                                        }
+                                }
+                                title={
+                                    disabled
+                                        ? "当前页面该场景无数据"
+                                        : scene.scene_name
+                                }
                             >
                                 {scene.scene_name}
                             </button>

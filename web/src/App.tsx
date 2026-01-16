@@ -3,6 +3,7 @@ import Sidebar, { NavKey, type Platform, type EvalModule } from "./components/Si
 import BaseInfoDrillCard from "./components/BaseInfoDrillCard";
 import SceneChartCard from "./components/SceneChartCard";
 import StopbarAbsoluteCard from "./components/StopbarAbsoluteCard";
+import AdbsoluteCard from "./components/AdAbsoluteCard";
 import ScenesPlatformView, { type SceneDataState } from "./components/ScenesPlatformView";
 import MultiSelectDropdown from "./components/MultiSelectDropdown";
 import type { BaseInfo, ODVersionItem, ODVersionsResponse } from "./api";
@@ -13,6 +14,8 @@ import {
     getMultiVersionSceneData,
     getSceneDataSpSummary,
     getMultiVersionSceneDataSpSummary,
+    getSceneDataAdSummary,
+    getMultiVersionSceneDataAdSummary,
 } from "./api/home";
 
 const BASEINFO_CONFIGS: { key: string; baseinfo: BaseInfo; title: string }[] = [
@@ -25,9 +28,15 @@ const BASEINFO_CONFIGS: { key: string; baseinfo: BaseInfo; title: string }[] = [
 ];
 
 // 当前前端已实现的评测模块（Sidebar.tsx 里需要同步开启 enabled）
-const IMPLEMENTED_EVAL_MODULES = new Set<EvalModule>(["stopbar_pr", "stopbar_absolute"]);
+const IMPLEMENTED_EVAL_MODULES = new Set<EvalModule>([
+    "stopbar_pr",
+    "stopbar_absolute",
+    "advance_detection_absolute",
+]);
 
-function parsePage(page: NavKey): { kind: "home" } | { kind: "eval"; evalModule: EvalModule; platform: Platform } {
+function parsePage(
+    page: NavKey
+): { kind: "home" } | { kind: "eval"; evalModule: EvalModule; platform: Platform } {
     if (page === "home") return { kind: "home" };
 
     // 兼容旧链接：arm/x86 -> stopbar_pr:*
@@ -51,8 +60,9 @@ export default function App() {
     const [activeOdVersions, setActiveOdVersions] = useState<string[]>([]);
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
-    // 场景导航选中状态（仅用于带“场景导航栏”的页面）
-    const [selectedScene, setSelectedScene] = useState<string | null>(null);
+    // 每个 eval 页面（evalModule + platform）独立的场景导航选中状态
+    const [selectedSceneByPage, setSelectedSceneByPage] = useState<Record<string, string | null>>({});
+
 
     const useMultiVersionMode = activeOdVersions.length > 0;
 
@@ -74,6 +84,34 @@ export default function App() {
     // 用于判断是否切换了 evalModule/platform（避免沿用上一页的 scene 列表/数据）
     const lastEvalKeyRef = useRef<string>("");
 
+    // 当前 eval 页的唯一 key（evalModule + platform）
+    const currentEvalKey = useMemo(
+        () =>
+            pageInfo.kind === "eval"
+                ? `${pageInfo.evalModule}:${pageInfo.platform}`
+                : "",
+        [pageInfo]
+    );
+
+    // 当前页面对应的选中 scene（其他页面互不影响）
+    const selectedScene = useMemo(
+        () =>
+            pageInfo.kind === "eval"
+                ? selectedSceneByPage[currentEvalKey] ?? null
+                : null,
+        [pageInfo, currentEvalKey, selectedSceneByPage]
+    );
+
+    // 场景点击时，只更新当前页面自己的选中项
+    const handleSelectScene = (sceneName: string) => {
+        if (pageInfo.kind !== "eval") return;
+        const key = `${pageInfo.evalModule}:${pageInfo.platform}`;
+        setSelectedSceneByPage((prev) => ({
+            ...prev,
+            [key]: sceneName,
+        }));
+    };
+
     // 加载 OD versions（一次）
     useEffect(() => {
         let cancelled = false;
@@ -92,7 +130,7 @@ export default function App() {
         };
     }, []);
 
-    // 平台页：stopbar_pr / stopbar_absolute 已实现；且避免闪屏（不清空列表，只做 loading 覆盖）
+    // 平台页：stopbar_pr / stopbar_absolute / advance_detection_absolute
     useEffect(() => {
         const seq = ++requestSeqRef.current;
         const controller = new AbortController();
@@ -159,22 +197,34 @@ export default function App() {
                                 baseinfo,
                                 eval_module: evalModule,
                             })
-                            : await getMultiVersionSceneData({
-                                od_versions: activeOdVersions,
-                                baseinfo,
-                                eval_module: evalModule,
-                            })
+                            : evalModule === "advance_detection_absolute"
+                                ? await getMultiVersionSceneDataAdSummary({
+                                    od_versions: activeOdVersions,
+                                    baseinfo,
+                                    eval_module: evalModule,
+                                })
+                                : await getMultiVersionSceneData({
+                                    od_versions: activeOdVersions,
+                                    baseinfo,
+                                    eval_module: evalModule,
+                                })
                         : evalModule === "stopbar_absolute"
                             ? await getSceneDataSpSummary({
                                 od_version: "latest",
                                 baseinfo,
                                 eval_module: evalModule,
                             })
-                            : await getSceneData({
-                                od_version: "latest",
-                                baseinfo,
-                                eval_module: evalModule,
-                            });
+                            : evalModule === "advance_detection_absolute"
+                                ? await getSceneDataAdSummary({
+                                    od_version: "latest",
+                                    baseinfo,
+                                    eval_module: evalModule,
+                                })
+                                : await getSceneData({
+                                    od_version: "latest",
+                                    baseinfo,
+                                    eval_module: evalModule,
+                                });
 
                 if (controller.signal.aborted || seq !== requestSeqRef.current) return;
 
@@ -227,7 +277,14 @@ export default function App() {
 
         return () => controller.abort();
         // 注意：platformScenes/scenesData 不要放依赖里，否则会重复触发
-    }, [pageInfo.kind, pageInfo.kind === "eval" ? pageInfo.evalModule : null, pageInfo.kind === "eval" ? pageInfo.platform : null, reloadNonce, useMultiVersionMode, activeOdVersions]);
+    }, [
+        pageInfo.kind,
+        pageInfo.kind === "eval" ? pageInfo.evalModule : null,
+        pageInfo.kind === "eval" ? pageInfo.platform : null,
+        reloadNonce,
+        useMultiVersionMode,
+        activeOdVersions,
+    ]);
 
     // Confirm/Reset
     const handleMultiVersionConfirm = () => {
@@ -260,7 +317,9 @@ export default function App() {
                 ? "stopbar pr"
                 : pageInfo.evalModule === "stopbar_absolute"
                     ? "stopbar absolute"
-                    : pageInfo.evalModule;
+                    : pageInfo.evalModule === "advance_detection_absolute"
+                        ? "advance detection absolute"
+                        : pageInfo.evalModule;
         return `${label} - ${pageInfo.platform}评测`;
     }, [pageInfo]);
 
@@ -274,7 +333,12 @@ export default function App() {
     const renderHome = () => (
         <div style={{ padding: 16, display: "grid", gridTemplateColumns: "1fr", gap: 16 }}>
             {BASEINFO_CONFIGS.map((cfg) => (
-                <BaseInfoDrillCard key={cfg.key} title={cfg.title} baseinfo={cfg.baseinfo} selectedOdVersion={selectedOdVersion} />
+                <BaseInfoDrillCard
+                    key={cfg.key}
+                    title={cfg.title}
+                    baseinfo={cfg.baseinfo}
+                    selectedOdVersion={selectedOdVersion}
+                />
             ))}
         </div>
     );
@@ -330,7 +394,13 @@ export default function App() {
                                 <select
                                     value={selectedOdVersion}
                                     onChange={(e) => setSelectedOdVersion(e.target.value)}
-                                    style={{ padding: "6px 12px", border: "1px solid #ddd", borderRadius: "4px", fontSize: "14px", minWidth: "200px" }}
+                                    style={{
+                                        padding: "6px 12px",
+                                        border: "1px solid #ddd",
+                                        borderRadius: "4px",
+                                        fontSize: "14px",
+                                        minWidth: "200px",
+                                    }}
                                 >
                                     {odVersions.map((item) => (
                                         <option key={item.od_version_minute} value={item.od_version_minute}>
@@ -365,6 +435,7 @@ export default function App() {
                     {pageInfo.kind === "eval" && !IMPLEMENTED_EVAL_MODULES.has(pageInfo.evalModule) && (
                         <div style={{ padding: 16, color: "#666" }}>该模块暂未实现</div>
                     )}
+
                     {pageInfo.kind === "eval" && pageInfo.evalModule === "stopbar_pr" && (
                         <ScenesPlatformView
                             platform={activePlatform}
@@ -373,7 +444,7 @@ export default function App() {
                             scenesData={scenesData}
                             enableSceneNav
                             selectedScene={selectedScene}
-                            onSelectScene={setSelectedScene}
+                            onSelectScene={handleSelectScene}
                             keyPrefix={`stopbar_pr:${activePlatform}`}
                             renderItem={(sceneData, idx) => (
                                 <SceneChartCard
@@ -398,10 +469,35 @@ export default function App() {
                             scenesData={scenesData}
                             enableSceneNav
                             selectedScene={selectedScene}
-                            onSelectScene={setSelectedScene}
+                            onSelectScene={handleSelectScene}
                             keyPrefix={`stopbar_absolute:${activePlatform}`}
                             renderItem={(sceneData, idx) => (
                                 <StopbarAbsoluteCard
+                                    sceneName={sceneData.scene_name}
+                                    platform={activePlatform}
+                                    sceneData={sceneData.data}
+                                    index={idx}
+                                    totalScenes={platformScenes.length}
+                                    loading={!!sceneData.loading}
+                                    error={sceneData.error}
+                                    selectedOdVersion={selectedOdVersion}
+                                />
+                            )}
+                        />
+                    )}
+
+                    {pageInfo.kind === "eval" && pageInfo.evalModule === "advance_detection_absolute" && (
+                        <ScenesPlatformView
+                            platform={activePlatform}
+                            platformLoading={platformLoading}
+                            platformScenes={platformScenes}
+                            scenesData={scenesData}
+                            enableSceneNav
+                            selectedScene={selectedScene}
+                            onSelectScene={handleSelectScene}
+                            keyPrefix={`advance_detection_absolute:${activePlatform}`}
+                            renderItem={(sceneData, idx) => (
+                                <AdbsoluteCard
                                     sceneName={sceneData.scene_name}
                                     platform={activePlatform}
                                     sceneData={sceneData.data}
